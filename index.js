@@ -55,12 +55,15 @@ module.exports = function(feature) {
   // compute intersection points
   var isectsData = [];
   var isectsPoints = isects(coord, function filterFn(r, o, s0, e0, p, s1, e1, unique){
-    if (unique) {
-
-        extra.push([r, o, s0, e0, p, s1, e1, unique]);
+    if (unique) { // Note: this may cause problems when there are two self-intersections at the same point
+          // compute parameters:
+          var ot = (r[0]-s0[0])/(e0[0]-s0[0]); // or equally: (r[1]-s0[1])/(e0[1]-s0[1])
+          var pt = (r[0]-s1[0])/(e1[0]-s1[0]); // or equally: (r[1]-s1[1])/(e1[1]-s1[1]))
+          //var pt = ;
+        isectsData.push([r, o, ot, s0, e0, p, pt, s1, e1]);
     }
   });
-  console.log(JSON.stringify(extra));
+  console.log(JSON.stringify(isectsData));
 
   // If no intersections are found, we can stop here
   if (isectsPoints.length == 0) return feature;
