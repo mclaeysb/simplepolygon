@@ -17,41 +17,25 @@ var isects = require('2d-polygon-self-intersections');
 
 
 // constructors
-var Vertex = function (coord) {
-  this.coord = coord; // [x,y]
-};
-
-var Polygon = function (vtxList) {
-  this.vtxList = vtxList || []; // array of Vertex
-};
-
-/* // Not used since we simply use an index for the polygon edges, which is equal to origin/origin1
-var LineSegment = function (start, end) { // polygon edge
-  this.start = start; // start vertex - Vertex
-  this.end = end; // end vertex - Vertex
-};
-*/
-
-var MultiPolygon = function (polyList) {
-  this.polyList = polyList || []; // Array of Polygon
-};
-
-var nVertex = function (v, param, index, l, incomming) { // (polygon- or intersection-) pseudo-vertex. There are two per self-intersection.
-  this.v = v; // the vetrex of this pseudo-vertex - Vertex
+var nVertex = function (coord, param, isect, nxtIsect, edgeIn, edgeOut) { // (polygon- or intersection-) pseudo-vertex. There are two per self-intersection.
+  this.coord = coord; // [x,y] of the vetrex of this pseudo-vertex - Vertex
   this.param = param; // fractional distance on its origin polygon edge
-  this.index = index; // the index in the intersection list of the next pseudo-vertex when following its origin polygon edge
-  this.l = l; // index of the the crossing polygon edge that created this pseudo-vertex
-  this.incomming = incomming; // index of incomming polygon edge
+  this.isect = isect; // the corresponding intersection
+  this.nxtIsect = nxtIsect; // the index in the intersection list of the next pseudo-vertex when following its origin polygon edge. This is 'index' in paper
+  this.edgeIn = edgeIn; // index of incomming polygon edge
+  this.edgeOut = edgeOut; // index of the the crossing polygon edge that created this pseudo-vertex. This is called 'l' in paper.
 };
 // NOTE: added incomming edge
 // TODO: rename, and reorder? ("this is know al 'l' in paper")
 
-var Intersection = function (v, origin1, origin2, index1, index2, winding) { // pair of pseudo-vertices. There is one per self-intersection. The order of 1 and 2 is not important but should be invariant.
-  this.v = v; // the vetrex of this pair of pseudo-vertex - Vertex
-  this.origin1 = origin1; // index of origin polygon vertex of the first polygon edge creating this intersection
-  this.origin2 = origin2; // index of origin polygon vertex of the second polygon edge creating this intersection
-  this.index1 = index1; // index in the intersection list of the next intersection when comming from origin1 and following that polygon edge
-  this.index2 = index2; // index in the intersection list of the next intersection when comming from origin2 and following that polygon edge
+var Intersection = function (coord, edge1, edge2, nVertex1, nVertex2, nxtIsect1, nxtIsect2, winding) { // pair of pseudo-vertices. There is one per self-intersection. The order of 1 and 2 is not important but should be invariant.
+  this.coord = coord; // the vetrex of this pair of pseudo-vertex - Vertex
+  this.edge1 = edge1; // index of origin polygon vertex of the first polygon edge creating this intersection // origin1
+  this.edge2 = edge2; // index of origin polygon vertex of the second polygon edge creating this intersection // origin2
+  this.nVertex1 = nVertex1;
+  this.nVertex2 = nVertex2;
+  this.nxtIsect1 = nxtIsect1; // index in the intersection list of the next intersection when comming from edge1 and following that polygon edge
+  this.nxtIsect2 = nxtIsect2; // index in the intersection list of the next intersection when comming from edge2 and following that polygon edge
   this.winding = winding;
 };
 // NOTE: we use an index for origins
@@ -87,22 +71,18 @@ module.exports = function(feature) {
     // Build polygonEdgeArray and intersectionList, without indices
     // 1) Add polygon vertices to polygonEdgeArray (as nVertex) and to intersectionList (as Intersection)
     for (var i = 0; i < coord.length-1; i++) {
-    	var currentVertex = new Vertex(coord[i]);
-      polygonEdgeArray.push([]);
-      var currentIntersection = new Intersection(currentVertex, i, undefined, undefined, -1, undefined); // index1 and winding are undefined yet, and origin2 is -1 for polygon-pseudo-vertex
-      // TODO: use -1 or undefined? origin2 is also left undefined...
+    	polygonEdgeArray.push([]);
+      var currentIntersection = new Intersection(coord[i], i, undefined, undefined, undefined, undefined, -1, undefined); // index1 and winding are undefined yet, and edge2 is -1 for polygon-pseudo-vertex
+      // TODO: use -1 or undefined? edge2 is also left undefined...
       intersectionList.push(currentIntersection);
     };
     // 2) Add self-intersection vertices to polygonEdgeArray (as nVertex) and (if unique) to intersectionList (as Intersection)
     for (var i = 0; i < isectsData.length; i++) {
     	var currentIsect = isectsData[i];
-      var currentVertex = new Vertex(currentIsect[0]);
-      var currentNVertex1 = new nVertex(currentVertex, currentIsect[8], undefined, currentIsect[4], currentIsect[1]);
-      //var currentNVertex2 = new nVertex(currentVertex, currentIsect[9], undefined, currentIsect[1], currentIsect[4]);
+      var currentNVertex1 = new nVertex(currentIsect[0], currentIsect[8], undefined, undefined, currentIsect[1], currentIsect[4]);
       polygonEdgeArray[currentIsect[1]].push(currentNVertex1);
-      //polygonEdgeArray[currentIsect[4]].push(currentNVertex2);
       if (currentIsect[7]){
-        var currentIntersection = new Intersection(currentVertex, currentIsect[1], currentIsect[4], undefined, undefined, undefined); // index1 and winding are undefined yet, and origin2 is -1 for polygon-pseudo-vertex
+        var currentIntersection = new Intersection(currentIsect[0], currentIsect[1], currentIsect[4], undefined, undefined, undefined, undefined, undefined); // index1 and winding are undefined yet, and edge2 is -1 for polygon-pseudo-vertex
         intersectionList.push(currentIntersection);
       };
     };
@@ -124,19 +104,19 @@ module.exports = function(feature) {
     for (var i = 0; i < polygonEdgeArray.length; i++){
       for (var j = 0; j < polygonEdgeArray[i].length; j++){
         if (j == polygonEdgeArray[i].length-1) {
-          polygonEdgeArray[i][j].index = (i + 1)%(polygonEdgeArray.length);
+          polygonEdgeArray[i][j].nxtIsect = (i + 1)%(polygonEdgeArray.length);
         } else {
           for (var k = 0; k < intersectionList.length; k++) { // TODO: faster using while loop
-            if (intersectionList[k].v.coord.equals(polygonEdgeArray[i][j+1].v.coord)) {
-              polygonEdgeArray[i][j].index = k;
+            if (intersectionList[k].coord.equals(polygonEdgeArray[i][j+1].coord)) {
+              polygonEdgeArray[i][j].nxtIsect = k;
             };
           };
         };
       };
     };
-    console.log(JSON.stringify(polygonEdgeArray[8]));
-    console.log(JSON.stringify(polygonEdgeArray[9]));
-    console.log("---");
+    //console.log(JSON.stringify(polygonEdgeArray[8]));
+    //console.log(JSON.stringify(polygonEdgeArray[9]));
+    //console.log("---");
     //console.log(JSON.stringify(polygonEdgeArray));
     // NOTE: This could be done more efficiently. Join?, ...
     var startvertexindex = 0; // We will also use this loop to find starting vertex of outermost simple polygon
@@ -146,11 +126,11 @@ module.exports = function(feature) {
         startvertexindex = i;
       };
       if (polygonEdgeArray[i].length == 0) {
-        intersectionList[i].index1 = (i + 1)%(polygonEdgeArray.length);
+        intersectionList[i].nxtIsect1 = (i + 1)%(polygonEdgeArray.length);
       } else {
         for (var k = 0; k < intersectionList.length; k++) {
-          if (intersectionList[k].v.coord.equals(polygonEdgeArray[i][0].v.coord)) { // faster using while
-            intersectionList[i].index1 = k;
+          if (intersectionList[k].coord.equals(polygonEdgeArray[i][0].coord)) { // faster using while
+            intersectionList[i].nxtIsect1 = k;
           };
         };
       };
@@ -159,13 +139,16 @@ module.exports = function(feature) {
       for (var j = 0; j < polygonEdgeArray.length; j++) {
         for (var k = 0; k < polygonEdgeArray[j].length; k++) {
           //console.log(JSON.stringify(intersectionList[i])+" and "+JSON.stringify(polygonEdgeArray[j][k]));
-          if (intersectionList[i].v.coord.equals(polygonEdgeArray[j][k].v.coord)) { // This will happen twice
-            //console.log(JSON.stringify(intersectionList[i].origin1)+" and "+JSON.stringify(intersectionList[i].origin2)+" and "+JSON.stringify(polygonEdgeArray[j][k].incomming)+" and "+JSON.stringify(polygonEdgeArray[j][k].l));
-            //console.log(polygonEdgeArray[j][k].index);
-            if (intersectionList[i].origin1 == polygonEdgeArray[j][k].incomming) {
-              intersectionList[i].index1 = polygonEdgeArray[j][k].index;
+          if (intersectionList[i].coord.equals(polygonEdgeArray[j][k].coord)) { // This will happen twice
+            polygonEdgeArray[j][k].isect = i; // TODO: define this earlier
+            //console.log(JSON.stringify(intersectionList[i].edge1)+" and "+JSON.stringify(intersectionList[i].edge2)+" and "+JSON.stringify(polygonEdgeArray[j][k].edgeIn)+" and "+JSON.stringify(polygonEdgeArray[j][k].edgeOut));
+            //console.log(polygonEdgeArray[j][k].nxtIsect);
+            if (intersectionList[i].edge1 == polygonEdgeArray[j][k].edgeIn) {
+              intersectionList[i].nxtIsect1 = polygonEdgeArray[j][k].nxtIsect;
+              intersectionList[i].nVertex1 = [j,k]; // TODO: adapt to new polygonEdgeArray
             } else {
-              intersectionList[i].index2 = polygonEdgeArray[j][k].index;
+              intersectionList[i].nxtIsect2 = polygonEdgeArray[j][k].nxtIsect;
+              intersectionList[i].nVertex2 = [j,k]; // TODO: adapt to new polygonEdgeArray
             };
           };
         };
@@ -195,51 +178,41 @@ module.exports = function(feature) {
     // It's 'index' will tell you where to jump next in the intersectionList if you want to make a polygon on the other side
     var intersectionQueue = []; // List of nVertex
     // while queue is not empty, take next one and check
-    var outputpolygon = [intersectionList[startvertexindex].v];
-    var walker = {index: intersectionList[startvertexindex].index1, edge: startvertexindex};
+    var outputpolygon = [intersectionList[startvertexindex].coord];
+    var walker = {nxtIsect: intersectionList[startvertexindex].nxtIsect1, edge: startvertexindex};
     // TODO: verwarrende naam? index verwijst ook soms naar volgende => index1 > indexnext1?
     // TODO: check if this always gives right-handed => yes, because polygon edge
-    while (startvertexindex != walker.index){
-      outputpolygon.push(intersectionList[walker.index].v);
-      console.log("walker: "+JSON.stringify(walker));
-      console.log(JSON.stringify(intersectionList[walker.index]));
-      if (intersectionList[walker.index].index2 == -1) {
-        walker.edge = intersectionList[walker.index].origin1;
-        walker.index = intersectionList[walker.index].index1;
+    while (startvertexindex != walker.nxtIsect){
+      outputpolygon.push(intersectionList[walker.nxtIsect].coord);
+      //console.log("walker: "+JSON.stringify(walker));
+      //console.log(JSON.stringify(intersectionList[walker.nxtIsect]));
+      if (intersectionList[walker.nxtIsect].nxtIsect2 == -1) {
+        walker.edge = intersectionList[walker.nxtIsect].edge1;
+        walker.nxtIsect = intersectionList[walker.nxtIsect].nxtIsect1;
       } else {
-        if (walker.edge == intersectionList[walker.index].origin1) {
+        if (walker.edge == intersectionList[walker.nxtIsect].edge1) {
           // add other to que
           // TODO: startwhile loop with pseudo-vector of first polygon, and therefor make these pseudo-vectors and add them all to one polygonEdgeArray
+          intersectionQueue.push(intersectionList[walker.nxtIsect].nVertex2);
           // go to next
-          walker.edge = intersectionList[walker.index].origin2;
-          walker.index = intersectionList[walker.index].index2;
+          walker.edge = intersectionList[walker.nxtIsect].edge2;
+          walker.nxtIsect = intersectionList[walker.nxtIsect].nxtIsect2;
         } else {
           // add other to que
+          intersectionQueue.push(intersectionList[walker.nxtIsect].nVertex1);
           // go to next
-          walker.edge = intersectionList[walker.index].origin1;
-          walker.index = intersectionList[walker.index].index1;
+          walker.edge = intersectionList[walker.nxtIsect].edge1;
+          walker.nxtIsect = intersectionList[walker.nxtIsect].nxtIsect1;
         };
       };
     };
-    outputpolygon.push(intersectionList[walker.index].v); // close polygon
-    for (var i = 0; i < outputpolygon.length; i++) {
-      outputpolygon[i] = outputpolygon[i].coord;
-    };
-    //console.log(JSON.stringify(outputpolygon));
+    outputpolygon.push(intersectionList[walker.nxtIsect].coord); // close polygon
+    console.log(JSON.stringify(outputpolygon));
     //console.log(JSON.stringify(polygonEdgeArray));
     //console.log(JSON.stringify(intersectionList));
 
-    return {
-      type: 'Feature',
-      geometry: {
-        type: "MultiPolygon",
-        coordinates: [[outputpolygon]]
-        },
-      properties: {
-        winding: [1]
-        }
-    };
-  }
+    return [[outputpolygon]];
+  };
 };
 
 // Function to compare Arrays of numbers, from http://stackoverflow.com/questions/7837456/how-to-compare-arrays-in-javascript
