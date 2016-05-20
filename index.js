@@ -118,39 +118,42 @@ module.exports = function(feature) {
     //console.log(JSON.stringify(intersectionList));
 
 
+    // NOTE: check if we can't just push all of them to the same array including polygon vertices, and then do one sort based on two keys. This can simplify much of the code later.
     // NOTE: check if loops over intersectionList can skip fist polygon edges
     // Fill indices in polygonEdgeArray
     for (var i = 0; i < polygonEdgeArray.length; i++){
       for (var j = 0; j < polygonEdgeArray[i].length; j++){
         if (j == polygonEdgeArray[i].length-1) {
-          polygonEdgeArray[i][j].index = i + 1; // NOTE: 9 will refer to 10, which may not be in coord
+          polygonEdgeArray[i][j].index = (i + 1)%(polygonEdgeArray.length);
         } else {
-          for (var k = 0; k < intersectionList.length; k++) {
-            if (intersectionList[k].v.coord.equals(polygonEdgeArray[i][j].v.coord)) {
+          for (var k = 0; k < intersectionList.length; k++) { // TODO: faster using while loop
+            if (intersectionList[k].v.coord.equals(polygonEdgeArray[i][j+1].v.coord)) {
               polygonEdgeArray[i][j].index = k;
             };
           };
         };
       };
     };
-
-    /*
-    console.log(JSON.stringify(polygonEdgeArray[0]));
-    console.log(JSON.stringify(polygonEdgeArray[3]));
+    console.log(JSON.stringify(polygonEdgeArray[8]));
+    console.log(JSON.stringify(polygonEdgeArray[9]));
     console.log("---");
-    console.log(polygonEdgeArray[0][0]==polygonEdgeArray[0][1]);
-    */
-
     //console.log(JSON.stringify(polygonEdgeArray));
     // NOTE: This could be done more efficiently. Join?, ...
+    var startvertexindex = 0; // We will also use this loop to find starting vertex of outermost simple polygon
     for (var i = 0; i < coord.length-1; i++) {
       //console.log(i);
+      if (coord[i][0] < coord[startvertexindex][0]) {
+        startvertexindex = i;
+      };
       if (polygonEdgeArray[i].length == 0) {
-        intersectionList[i].index1 = i + 1; // NOTE: 9 will refer to 10, which may not be in coord
+        intersectionList[i].index1 = (i + 1)%(polygonEdgeArray.length);
       } else {
-        //console.log(JSON.stringify(polygonEdgeArray[i][0]));
-        intersectionList[i].index1 = polygonEdgeArray[i][0].index;
-      }
+        for (var k = 0; k < intersectionList.length; k++) {
+          if (intersectionList[k].v.coord.equals(polygonEdgeArray[i][0].v.coord)) { // faster using while
+            intersectionList[i].index1 = k;
+          };
+        };
+      };
     };
     for (var i = coord.length-1; i < intersectionList.length; i++) {
       for (var j = 0; j < polygonEdgeArray.length; j++) {
@@ -172,23 +175,65 @@ module.exports = function(feature) {
     //console.log(JSON.stringify(polygonEdgeArray));
     //console.log(JSON.stringify(intersectionList));
 
+    /*
+    console.log(JSON.stringify(intersectionList[0]));
+    console.log(JSON.stringify(intersectionList[11]));
+    console.log(JSON.stringify(intersectionList[4]));
+    console.log(JSON.stringify(intersectionList[12]));
+    console.log(JSON.stringify(intersectionList[10]));
+    console.log(JSON.stringify(intersectionList[13]));
+    console.log(JSON.stringify(intersectionList[5]));
+    console.log(JSON.stringify(intersectionList[14]));
+    console.log(JSON.stringify(intersectionList[3]));
+    console.log(JSON.stringify(intersectionList[17]));
+    console.log(JSON.stringify(intersectionList[9]));
+    */
+
     // Start at outer (convex) point and jump though intersectionList and make polygon by storing vertices.
     // When arriving at a pseudo-vertex that is not a polygon-pseudo-vertex, store it.
     // When done, take next nVertex from queue (check if ...)
     // It's 'index' will tell you where to jump next in the intersectionList if you want to make a polygon on the other side
     var intersectionQueue = []; // List of nVertex
-
-
-
-
-  //console.log(JSON.stringify(polygonEdgeArray));
-  //console.log(JSON.stringify(intersectionList));
+    // while queue is not empty, take next one and check
+    var outputpolygon = [intersectionList[startvertexindex].v];
+    var walker = {index: intersectionList[startvertexindex].index1, edge: startvertexindex};
+    // TODO: verwarrende naam? index verwijst ook soms naar volgende => index1 > indexnext1?
+    // TODO: check if this always gives right-handed => yes, because polygon edge
+    while (startvertexindex != walker.index){
+      outputpolygon.push(intersectionList[walker.index].v);
+      console.log("walker: "+JSON.stringify(walker));
+      console.log(JSON.stringify(intersectionList[walker.index]));
+      if (intersectionList[walker.index].index2 == -1) {
+        walker.edge = intersectionList[walker.index].origin1;
+        walker.index = intersectionList[walker.index].index1;
+      } else {
+        if (walker.edge == intersectionList[walker.index].origin1) {
+          // add other to que
+          // TODO: startwhile loop with pseudo-vector of first polygon, and therefor make these pseudo-vectors and add them all to one polygonEdgeArray
+          // go to next
+          walker.edge = intersectionList[walker.index].origin2;
+          walker.index = intersectionList[walker.index].index2;
+        } else {
+          // add other to que
+          // go to next
+          walker.edge = intersectionList[walker.index].origin1;
+          walker.index = intersectionList[walker.index].index1;
+        };
+      };
+    };
+    outputpolygon.push(intersectionList[walker.index].v); // close polygon
+    for (var i = 0; i < outputpolygon.length; i++) {
+      outputpolygon[i] = outputpolygon[i].coord;
+    };
+    //console.log(JSON.stringify(outputpolygon));
+    //console.log(JSON.stringify(polygonEdgeArray));
+    //console.log(JSON.stringify(intersectionList));
 
     return {
       type: 'Feature',
       geometry: {
         type: "MultiPolygon",
-        coordinates: [[[[0,0],[1,0],[1,1],[0,0]]]]
+        coordinates: [[outputpolygon]]
         },
       properties: {
         winding: [1]
