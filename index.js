@@ -206,61 +206,75 @@ module.exports = function(feature) {
       console.log("starting at intersection number "+JSON.stringify(startIsect));
       outputPoly.push([]);
       outputPoly[i].push(intersectionList[startIsect].coord);
+      var thisIsect = startIsect;
       if (intersectionList[startIsect].edge1WalkedAway) {
-        var walker = {WalkerNxtIsect: intersectionList[startIsect].nxtIsect2, edge: intersectionList[startIsect].edge2};
+        var nxtIsect = intersectionList[startIsect].nxtIsect2;
+        var walkingEdge = intersectionList[startIsect].edge2;
       } else {
-        var walker = {WalkerNxtIsect: intersectionList[startIsect].nxtIsect1, edge: intersectionList[startIsect].edge1};
+        var nxtIsect = intersectionList[startIsect].nxtIsect1;
+        var walkingEdge = intersectionList[startIsect].edge1;
       };
       //console.log(JSON.stringify(polygonEdgeArray));
       //console.log("---");
       //console.log(JSON.stringify(intersectionList));
       //console.log("---");
-      while (!intersectionList[startIsect].coord.equals(intersectionList[walker.WalkerNxtIsect].coord)){
-        console.log("now at: "+walker.WalkerNxtIsect);
+      while (!intersectionList[startIsect].coord.equals(intersectionList[nxtIsect].coord)){
+        console.log("now at: "+thisIsect+" walking to "+nxtIsect+" over "+walkingEdge);
         console.log("with isectQueue: "+JSON.stringify(isectQueue));
-        //console.log(JSON.stringify(intersectionList[walker.WalkerNxtIsect]));
-        outputPoly[i].push(intersectionList[walker.WalkerNxtIsect].coord);
-        // NOTE: make variable 'nxtIsectIn = intersectionList[walker.WalkerNxtIsect]''?
-        if (intersectionList[walker.WalkerNxtIsect].nxtIsect2 == -1) { // TODO: do we have to treat this differently?
+        //console.log(JSON.stringify(intersectionList[nxtIsect]));
+        outputPoly[i].push(intersectionList[nxtIsect].coord);
+        console.log("pushed to polygon: "+nxtIsect);
+        // Walk there
+        // NOTE: make variable 'nxtIsectIn = intersectionList[nxtIsect]''?
+        if (intersectionList[nxtIsect].nxtIsect2 == -1) { // TODO: do we have to treat this differently?
           // TODO: keep -1?
-          walker.edge = intersectionList[walker.WalkerNxtIsect].edge1;
-          walker.WalkerNxtIsect = intersectionList[walker.WalkerNxtIsect].nxtIsect1;
+          walkingEdge = intersectionList[nxtIsect].edge1;
+          thisIsect = nxtIsect;
+          nxtIsect = intersectionList[nxtIsect].nxtIsect1;
         } else {
-          if (walker.edge == intersectionList[walker.WalkerNxtIsect].edge1) {
+          if (isectQueue.indexOf(nxtIsect) >= 0) {
+            console.log("index of: "+nxtIsect+" in queue is "+isectQueue.indexOf(nxtIsect));
+            console.log("-> removing from queue: "+nxtIsect);
+            isectQueue.splice(isectQueue.indexOf(nxtIsect),1);
+          }
+          //isectQueue.splice(isectQueue.indexOf(nxtIsect)); // If next intersection occures in list, remove it
+
+          // check if you have to add it to the list
+          if (walkingEdge == intersectionList[nxtIsect].edge1) {
             // add queue
-            intersectionList[walker.WalkerNxtIsect].edge2WalkedAway = true;
-            console.log("check edge1WalkedAway"+JSON.stringify(intersectionList[walker.WalkerNxtIsect]));
-            if (intersectionList[walker.WalkerNxtIsect].edge1WalkedAway == false) {
-              console.log("-> pushing "+JSON.stringify(walker.WalkerNxtIsect));
-              isectQueue.push(walker.WalkerNxtIsect);
+            intersectionList[nxtIsect].edge2WalkedAway = true;
+            console.log("check edge1WalkedAway "+JSON.stringify(intersectionList[nxtIsect]));
+            if (intersectionList[nxtIsect].edge1WalkedAway == false) {
+              console.log("-> pushing to queue: "+JSON.stringify(nxtIsect));
+              isectQueue.push(nxtIsect);
             }
             // go to next
-            walker.edge = intersectionList[walker.WalkerNxtIsect].edge2;
-            walker.WalkerNxtIsect = intersectionList[walker.WalkerNxtIsect].nxtIsect2;
+            walkingEdge = intersectionList[nxtIsect].edge2;
+            thisIsect = nxtIsect;
+            nxtIsect = intersectionList[nxtIsect].nxtIsect2;
           } else {
             // add queue
-            intersectionList[walker.WalkerNxtIsect].edge1WalkedAway = true;
-            console.log("check edge2WalkedAway"+JSON.stringify(intersectionList[walker.WalkerNxtIsect]));
-            if (intersectionList[walker.WalkerNxtIsect].edge2WalkedAway == false) {
-              console.log("-> pushing "+JSON.stringify(walker.WalkerNxtIsect));
-              isectQueue.push(walker.WalkerNxtIsect);
+            intersectionList[nxtIsect].edge1WalkedAway = true;
+            console.log("check edge2WalkedAway "+JSON.stringify(intersectionList[nxtIsect]));
+            if (intersectionList[nxtIsect].edge2WalkedAway == false) {
+              console.log("-> pushing to queue: "+JSON.stringify(nxtIsect));
+              isectQueue.push(nxtIsect);
             };
             // go to next
-            walker.edge = intersectionList[walker.WalkerNxtIsect].edge1;
-            walker.WalkerNxtIsect = intersectionList[walker.WalkerNxtIsect].nxtIsect1;
+            walkingEdge = intersectionList[nxtIsect].edge1;
+            thisIsect = nxtIsect;
+            nxtIsect = intersectionList[nxtIsect].nxtIsect1;
           };
-          isectQueue.splice(isectQueue.indexOf(walker.WalkerNxtIsect)); // If this intersection occures in list, remove it
         };
-        console.log("walker says: "+JSON.stringify(walker));
       };
-      outputPoly[i].push(intersectionList[walker.WalkerNxtIsect].coord); // close polygon
+      outputPoly[i].push(intersectionList[nxtIsect].coord); // close polygon
       i++
     }
     //console.log(JSON.stringify(polygonEdgeArray));
     //console.log(JSON.stringify(intersectionList));
     console.log("total amount of polygons: "+outputPoly.length);
 
-    return [outputPoly];
+    return outputPoly;
   };
 };
 
