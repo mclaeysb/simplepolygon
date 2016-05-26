@@ -226,13 +226,6 @@ module.exports = function(feature) {
   var outputWindingArray = [];
   var outputNetWindingArray = [];
 
-  // TODO:
-  /*
-  console.log(JSON.stringify(pseudoVtxListByEdge,null,2));
-  console.log("---");
-  console.log(JSON.stringify(isectList,null,2));
-  */
-
   // While intersection queue is not empty, take the first intersection out and start making a simple polygon in the direction that has not been walked away over yet.
   while (isectQueue.length>0) {
     // Get the first objects out of the queue
