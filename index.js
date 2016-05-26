@@ -1,5 +1,32 @@
 var fs = require('fs');
 var isects = require('2d-polygon-self-intersections');
+
+/**
+* Takes a complex (i.e. self-intersecting) polygon, and returns a MultiPolygon of the simple polygons it is composed of.
+*
+* @module simplepolygon
+* @param {(Feature|FeatureCollection)} feature input to be buffered
+* @param {Number} distance distance to draw the buffer
+* @param {String} unit 'miles', 'feet', 'kilometers', 'meters', or 'degrees'
+* @return {FeatureCollection<Polygon>|FeatureCollection<MultiPolygon>|Polygon|MultiPolygon} buffered features
+*
+* @example
+* var poly = {
+*   "type": "Feature",
+*   "properties": {},
+*   "geometry": {
+*     "type": "Polygon",
+*     "coordinates": [[[],[],[],[]]]
+*   }
+* };
+* var unit = 'miles';
+*
+* var buffered = turf.buffer(pt, 500, unit);
+* var result = turf.featurecollection([buffered, pt]);
+*
+* //=result
+*/
+
 /*
   This algorithm works by walking from intersection to intersection over edges in their original direction, and making polygons by storing their vertices. Each intersection knows which is the next one given the edge we came over. When walking, we store where we have walked (since we must only walk over each (part of an) edge once), and keep track of intersections we encounter but have not walked away from in the other direction. We start at an outer polygon intersection to compute a first simple polygon. Once done, we use the queue to compute the polygon. By remembering how the polygons are nested and computing each polygons winding number, we can also compute the total winding numbers.
 
@@ -28,7 +55,9 @@ var isects = require('2d-polygon-self-intersections');
   - 'Isect' is called 'intersection'
   - 'nxtIsectAlongEdgeIn' is called 'index'
   - 'edge1' and 'edge2' are named 'origin1' and 'origin2'
+  - 'winding' is not implemented as a propoerty of an intersection, but as its own queue
   - 'pseudoVtxListByEdge' is called 'polygonEdgeArray'
+  - 'pseudoVtxListByEdge' contains the polygon vertex at its end as the last item, and not the polygon vertex at its start as the first item
   - 'isectList' is called 'intersectionList'
   - 'isectQueue' is called 'intersectioQueue'
 */
@@ -43,16 +72,14 @@ var PseudoVtx = function (coord, param, edgeIn, edgeOut, nxtIsectAlongEdgeIn) {
 }
 
 // Constructor for a intersection. If the input polygon points are unique, there are two intersection-pseudo-vertices per self-intersection and one polygon-pseudo-vertex per polygon-vertex-intersection. Their labels 1 and 2 are not assigned a particular meaning but are permanent once given.
-var Isect = function (coord, isPolyVtxIsect, edge1, edge2, nxtIsectAlongEdge1, nxtIsectAlongEdge2, Edge1Walkable, Edge2Walkable, winding) {
+var Isect = function (coord, edge1, edge2, nxtIsectAlongEdge1, nxtIsectAlongEdge2, Edge1Walkable, Edge2Walkable) {
   this.coord = coord; // [x,y] of this intersection
-  this.isPolyVtxIsect = isPolyVtxIsect; // is this a polygon-pseudo-vertex?
   this.edge1 = edge1; // first edge of this intersection
   this.edge2 = edge2; // second edge of this intersection
   this.nxtIsectAlongEdge1 = nxtIsectAlongEdge1; // the next intersection when following edge1
   this.nxtIsectAlongEdge2 = nxtIsectAlongEdge2; // the next intersection when following edge2
   this.Edge1Walkable = Edge1Walkable; // May we (still) walk away from this intersection over edge1?
   this.Edge2Walkable = Edge2Walkable; // May we (still) walk away from this intersection over edge2?
-  this.winding = winding; // NOTE: used?
 }
 
 
@@ -77,8 +104,23 @@ module.exports = function(feature) {
   });
   var numIsect = isectsData.length;
 
-  // If no self-intersections are found, we can stop here
-  if (numIsect == 0) return feature;
+  // If no self-intersections are found, we can simple return the feature as MultiPolygon, and compute its winding number
+  if (numIsect == 0) {
+    // Compute the winding number based on the vertex with the lowest x-value, it precessor and successor. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
+    var lowestVtx = 0;
+    for (var i = 0; i < numPolyVertices; i++) { if (inputPoly[i][0] < inputPoly[lowestVtx][0]) lowestVtx = i; }
+    if (isConvex([inputPoly[(lowestVtx-1).mod(numPolyVertices)],inputPoly[lowestVtx],inputPoly[(lowestVtx+1).mod(numPolyVertices)]],true)) {
+      var winding = 1;
+    } else {
+      var winding = -1;
+    }
+    feature.geometry.type = 'MultiPolygon';
+    feature.geometry.coordinates = [feature.geometry.coordinates];
+    feature.properties.parent = -1;
+    feature.properties.winding = winding;
+    feature.properties.netWinding = winding;
+    return feature;
+  }
 
   // Build intersection master list and polygon edge array
   var pseudoVtxListByEdge = []; // An Array with for each edge an Array containing the pseudo-vertices (as made by their constructor) that have this edge as edgeIn, sorted by their fractional distance on this edge.
@@ -88,14 +130,14 @@ module.exports = function(feature) {
     // Each edge will feature one polygon-pseudo-vertex in its array, on the last position. I.e. edge i features the polygon-pseudo-vertex of the polygon vertex i+1, with edgeIn = i, on the last position.
   	pseudoVtxListByEdge.push([new PseudoVtx(inputPoly[(i+1).mod(numPolyVertices)], 1, i, (i+1).mod(numPolyVertices), undefined)]);
     // The first numPolyVertices elements in isectList correspong to the polygon-vertex-intersections
-    isectList.push(new Isect(inputPoly[i], true, (i-1).mod(numPolyVertices), i, undefined, undefined, false, true, undefined));
+    isectList.push(new Isect(inputPoly[i], (i-1).mod(numPolyVertices), i, undefined, undefined, false, true));
   }
   // Push intersection-pseudo-vertices to pseudoVtxListByEdge and self-intersections to isectList
   for (var i = 0; i < numIsect; i++) {
     // Add intersection-pseudo-vertex made using isectsData to pseudoVtxListByEdge's array corresponding to the incomming edge
     pseudoVtxListByEdge[isectsData[i][1]].push(new PseudoVtx(isectsData[i][0], isectsData[i][8], isectsData[i][1], isectsData[i][4], undefined));
     // isectsData contains double mentions of each intersection, but we only want to add them once to isectList
-    if (isectsData[i][7]) isectList.push(new Isect(isectsData[i][0], false, isectsData[i][1], isectsData[i][4], undefined, undefined, true, true, undefined));
+    if (isectsData[i][7]) isectList.push(new Isect(isectsData[i][0], isectsData[i][1], isectsData[i][4], undefined, undefined, true, true));
   }
   // Sort Arrays of pseudoVtxListByEdge by the fraction distance 'param' using compare function
   for (var i = 0; i < numPolyVertices; i++) {
@@ -115,7 +157,7 @@ module.exports = function(feature) {
         // Check if you found nxtIsect (different if last one)
         if (j == pseudoVtxListByEdge[i].length-1) {
           if (isectList[k].coord.equals(pseudoVtxListByEdge[(i+1).mod(numPolyVertices)][0].coord)) {
-            pseudoVtxListByEdge[i][j].nxtIsectAlongEdgeIn = k; // NOTE: for polygon-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along edgeOut. This is dealt with correctly in the next block.
+            pseudoVtxListByEdge[i][j].nxtIsectAlongEdgeIn = k; // For polygon-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along edgeOut. This is dealt with correctly in the next block.
             foundNextIsect = true;
           }
         } else {
@@ -151,28 +193,58 @@ module.exports = function(feature) {
     }
   }
 
-  // Find the polygon vertex with lowest x-value. This vertex is certainly part of the outermost simple polygon
-  var outputPolyArray = [];
-  var startPolyVtx = 0;
+  // Find the polygon vertex with lowest x-value. This vertex's intersection is certainly part of only one outermost simple polygon
+  var firstPolyFirstIsect = 0;
   for (var i = 0; i < numPolyVertices; i++) {
-    if (inputPoly[i][0] < inputPoly[startPolyVtx][0]) {
-      startPolyVtx = i;
+    if (inputPoly[i][0] < inputPoly[firstPolyFirstIsect][0]) {
+      firstPolyFirstIsect = i;
     }
   }
+  // Find the intersection before and after it
+  var firstPolySecondIsect = isectList[firstPolyFirstIsect].nxtIsectAlongEdge2;
+  for (var i = 0; i < isectList.length; i++) {
+    if ((isectList[i].nxtIsectAlongEdge1 == firstPolyFirstIsect) || (isectList[i].nxtIsectAlongEdge2 == firstPolyFirstIsect)) {
+      var firstPolyLastIsect = i;
+      break
+    }
+  }
+  // Use them to determine the winding number of this first polygon. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
+  if (isConvex([isectList[firstPolyLastIsect].coord,isectList[firstPolyFirstIsect].coord,isectList[firstPolySecondIsect].coord],true)) {
+    firstPolyWinding = 1;
+  } else {
+    firstPolyWinding = -1;
+  }
 
-  // Initialise the intersection and parent queue
-  var isectQueue = [startPolyVtx]; // Queue of intersections to start new simple polygon from
+  // Initialise the queues
+  var isectQueue = [firstPolyFirstIsect]; // Queue of intersections to start new simple polygon from
   var parentQueue = [-1]; // Queue of the parent polygon of polygon started from the corresponding intersection in the isectQueue
+  var windingQueue = [firstPolyWinding];
 
-  // While queue is not empty, take the first intersection out and start making a simple polygon in the direction that has not been walked away over yet.
+  // Initialise outputs
+  var outputPolyArray = [];
+  var outputParentArray = [];
+  var outputWindingArray = [];
+  var outputNetWindingArray = [];
+
+  console.log(JSON.stringify(pseudoVtxListByEdge,null,2));
+  console.log("---");
+  console.log(JSON.stringify(isectList,null,2));
+
+  // While intersection queue is not empty, take the first intersection out and start making a simple polygon in the direction that has not been walked away over yet.
   while (isectQueue.length>0) {
-    // Get the first intersection out of the queue
+    // Get the first objects out of the queue
     var startIsect = isectQueue.shift();
-    var thisParent = parentQueue.shift();
+    var thisPolyParent = parentQueue.shift();
+    var thisPolyWinding = windingQueue.shift();
     // Make new output polygon and add vertex from starting intersection
-    outputPolyArray.push([]);
-    outputPolyArray[outputPolyArray.length-1].push(isectList[startIsect].coord);
-    if (debug) console.log("# Now at polygon number "+(outputPolyArray.length-1));
+    outputPolyArray.push([[]]);
+    var thisPoly = outputPolyArray.length-1;
+    outputPolyArray[thisPoly][0].push(isectList[startIsect].coord);
+    if (debug) console.log("# Now at polygon number "+(thisPoly));
+    // Add the properties of this new polygon
+    outputParentArray.push(thisPolyParent);
+    outputWindingArray.push(thisPolyWinding);
+    outputNetWindingArray.push((outputWindingArray[thisPolyParent]||0)+thisPolyWinding);
     // Set up the variables used while walking through intersections: 'thisIsect', 'nxtIsect' and 'walkingEdge'
     var thisIsect = startIsect;
     if (isectList[startIsect].Edge1Walkable) {
@@ -184,17 +256,20 @@ module.exports = function(feature) {
     }
     // While we have not arrived back at the same intersection, keep walking
     while (!isectList[startIsect].coord.equals(isectList[nxtIsect].coord)){
-      if (debug) console.log("Walking from intersection "+thisIsect+" to "+nxtIsect+" over edge "+walkingEdge+" with intersection queue: "+JSON.stringify(isectQueue));
-      outputPolyArray[outputPolyArray.length-1].push(isectList[nxtIsect].coord);
+      if (debug) console.log("Walking from intersection "+thisIsect+" to "+nxtIsect+" over edge "+walkingEdge);
+      if (debug) console.log("Current state of queues: \nIntersections: "+JSON.stringify(isectQueue)+"\nParents: "+JSON.stringify(parentQueue)+"\nWindings: "+JSON.stringify(windingQueue));
+      outputPolyArray[thisPoly][0].push(isectList[nxtIsect].coord);
       if (debug) console.log("Added intersection "+nxtIsect+" to this polygon");
       // If the next intersection is queued, we can remove it, because we will go there now
       if (isectQueue.indexOf(nxtIsect) >= 0) {
         if (debug) console.log("Removing intersection "+nxtIsect+" from queue");
-        isectQueue.splice(isectQueue.indexOf(nxtIsect),1);
         parentQueue.splice(isectQueue.indexOf(nxtIsect),1);
+        windingQueue.splice(isectQueue.indexOf(nxtIsect),1);
+        isectQueue.splice(isectQueue.indexOf(nxtIsect),1); // remove this one last
       }
       // Remeber which edge we will now walk over (if we came from 1 we will walk away from 2 and vice versa),
       // add the intersection to the queue if we have never walked away over the other edge,
+      // queue the parent and winding number (if the edge is convex, the next polygon will have the alternate winding and lie outside of the current one, and thus have the same parent polygon as the current polygon. Otherwise, it will have the same winding number and lie inside of the current polygon)
       // and update walking variables.
       // The properties to adjust depend on what edge we are walking over.
       if (walkingEdge == isectList[nxtIsect].edge1) {
@@ -202,13 +277,13 @@ module.exports = function(feature) {
         if (isectList[nxtIsect].Edge1Walkable) {
           if (debug) console.log("Adding intersection "+nxtIsect+" to queue");
           isectQueue.push(nxtIsect);
-          /*
-          if (isConvex([isectList[thisIsect].v, isectList[nxtIsect].v, isectList[isectList[nxtIsect].nxtIsectAlongEdge2].v])) {
-            parentQueue.push(thisParent);
+          if (isConvex([isectList[thisIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongEdge2].coord],thisPolyWinding == 1)) {
+            parentQueue.push(thisPolyParent);
+            windingQueue.push(-thisPolyWinding);
           } else {
-            parentQueue.push((outputPolyArray.length-1));
+            parentQueue.push(thisPoly);
+            windingQueue.push(thisPolyWinding);
           }
-          */
         }
         thisIsect = nxtIsect;
         walkingEdge = isectList[nxtIsect].edge2;
@@ -218,42 +293,31 @@ module.exports = function(feature) {
         if (isectList[nxtIsect].Edge2Walkable) {
           if (debug) console.log("Adding intersection "+nxtIsect+" to queue");
           isectQueue.push(nxtIsect);
-          /*
-          if (isConvex([isectList[thisIsect].v, isectList[nxtIsect].v, isectList[isectList[nxtIsect].nxtIsectAlongEdge2].v)) {
-            parentQueue.push(thisParent);
+          if (isConvex([isectList[thisIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongEdge1].coord],thisPolyWinding == 1)) {
+            parentQueue.push(thisPolyParent);
+            windingQueue.push(-thisPolyWinding);
           } else {
-            parentQueue.push((outputPolyArray.length-1));
+            parentQueue.push(thisPoly);
+            windingQueue.push(thisPolyWinding);
           }
-          */
         }
         thisIsect = nxtIsect;
         walkingEdge = isectList[nxtIsect].edge1;
         nxtIsect = isectList[nxtIsect].nxtIsectAlongEdge1;
       }
     }
-    outputPolyArray[outputPolyArray.length-1].push(isectList[nxtIsect].coord); // close polygon
+    outputPolyArray[thisPoly][0].push(isectList[nxtIsect].coord); // close polygon
   }
-  if (debug) console.log("# Total amount of simple polygons: "+outputPolyArray.length);
+  if (debug) console.log("# Total of "+outputPolyArray.length+" simple polygons");
 
-  return {
-          type: 'Feature',
-          geometry: {
-            type: 'MultiPolygon',
-            coordinates: [outputPolyArray]
-            },
-          properties: {
-            winding: [1]
-            }
-        }
+  feature.geometry.type = 'MultiPolygon';
+  feature.geometry.coordinates = outputPolyArray;
+  feature.properties.parent = outputParentArray;
+  feature.properties.winding = outputWindingArray;
+  feature.properties.netWinding = outputNetWindingArray;
+  return feature;
 }
 
-// Function to determine if three consecutive points of a polygon make up a convex vertex, assuming the polygon is right- or lefthanded
-function isConvex(pts, righthanded){
-  if (typeof(righthanded) === 'undefined') righthanded = true;
-  if (pts.length != 3) throw new Error("This function requires an array of three points [x,y]");
-  var d = (pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0]);
-  return (d >= 0) == righthanded;
-}
 
 
 // Function to compare Arrays of numbers. From http://stackoverflow.com/questions/7837456/how-to-compare-arrays-in-javascript
@@ -317,4 +381,12 @@ Array.prototype.isUnique = function(){
       u[this[i]] = 1;
    }
    return isUnique;
+}
+
+// Function to determine if three consecutive points of a polygon make up a convex vertex, assuming the polygon is right- or lefthanded
+function isConvex(pts, righthanded){
+  if (typeof(righthanded) === 'undefined') righthanded = true;
+  if (pts.length != 3) throw new Error("This function requires an array of three points [x,y]");
+  var d = (pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0]);
+  return (d >= 0) == righthanded;
 }
