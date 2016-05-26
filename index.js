@@ -95,17 +95,17 @@ module.exports = function(feature) {
   var numPolyVertices = inputPoly.length-1;
 
   // Compute self-intersections
-  var isectsData = [];
-  var isectsPoints = isects(inputPoly, function filterFn(r, o, s0, e0, p, s1, e1, unique){
+  var selfIsectsData = [];
+  var selfIsectsPoints = isects(inputPoly, function filterFn(r, o, s0, e0, p, s1, e1, unique){
     // Compute fractional distance of each self-intersection on both its polygon edges o and p: ot and pt in [0,1]
     var ot = (r[0]-s0[0])/(e0[0]-s0[0]); // or equally: (r[1]-s0[1])/(e0[1]-s0[1])
     var pt = (r[0]-s1[0])/(e1[0]-s1[0]); // or equally: (r[1]-s1[1])/(e1[1]-s1[1]))
-    isectsData.push([r, o, s0, e0, p, s1, e1, unique, ot, pt]);
+    selfIsectsData.push([r, o, s0, e0, p, s1, e1, unique, ot, pt]);
   });
-  var numIsect = isectsData.length;
+  var numSelfIsect = selfIsectsData.length;
 
   // If no self-intersections are found, we can simple return the feature as MultiPolygon, and compute its winding number
-  if (numIsect == 0) {
+  if (numSelfIsect == 0) {
     // Compute the winding number based on the vertex with the lowest x-value, it precessor and successor. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
     var lowestVtx = 0;
     for (var i = 0; i < numPolyVertices; i++) { if (inputPoly[i][0] < inputPoly[lowestVtx][0]) lowestVtx = i; }
@@ -133,12 +133,13 @@ module.exports = function(feature) {
     isectList.push(new Isect(inputPoly[i], (i-1).mod(numPolyVertices), i, undefined, undefined, false, true));
   }
   // Push intersection-pseudo-vertices to pseudoVtxListByEdge and self-intersections to isectList
-  for (var i = 0; i < numIsect; i++) {
-    // Add intersection-pseudo-vertex made using isectsData to pseudoVtxListByEdge's array corresponding to the incomming edge
-    pseudoVtxListByEdge[isectsData[i][1]].push(new PseudoVtx(isectsData[i][0], isectsData[i][8], isectsData[i][1], isectsData[i][4], undefined));
-    // isectsData contains double mentions of each intersection, but we only want to add them once to isectList
-    if (isectsData[i][7]) isectList.push(new Isect(isectsData[i][0], isectsData[i][1], isectsData[i][4], undefined, undefined, true, true));
+  for (var i = 0; i < numSelfIsect; i++) {
+    // Add intersection-pseudo-vertex made using selfIsectsData to pseudoVtxListByEdge's array corresponding to the incomming edge
+    pseudoVtxListByEdge[selfIsectsData[i][1]].push(new PseudoVtx(selfIsectsData[i][0], selfIsectsData[i][8], selfIsectsData[i][1], selfIsectsData[i][4], undefined));
+    // selfIsectsData contains double mentions of each intersection, but we only want to add them once to isectList
+    if (selfIsectsData[i][7]) isectList.push(new Isect(selfIsectsData[i][0], selfIsectsData[i][1], selfIsectsData[i][4], undefined, undefined, true, true));
   }
+  var numIsect = isectList.length;
   // Sort Arrays of pseudoVtxListByEdge by the fraction distance 'param' using compare function
   for (var i = 0; i < numPolyVertices; i++) {
     pseudoVtxListByEdge[i].sort(function(a, b){
@@ -154,7 +155,6 @@ module.exports = function(feature) {
     for (var j = 0; j < pseudoVtxListByEdge[i].length; j++){
       var foundNextIsect = false;
       for (var k = 0; (k < numIsect) && !foundNextIsect; k++) {
-        // Check if you found nxtIsect (different if last one)
         if (j == pseudoVtxListByEdge[i].length-1) {
           if (isectList[k].coord.equals(pseudoVtxListByEdge[(i+1).mod(numPolyVertices)][0].coord)) {
             pseudoVtxListByEdge[i][j].nxtIsectAlongEdgeIn = k; // For polygon-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along edgeOut. This is dealt with correctly in the next block.
@@ -226,9 +226,12 @@ module.exports = function(feature) {
   var outputWindingArray = [];
   var outputNetWindingArray = [];
 
+  // TODO:
+  /*
   console.log(JSON.stringify(pseudoVtxListByEdge,null,2));
   console.log("---");
   console.log(JSON.stringify(isectList,null,2));
+  */
 
   // While intersection queue is not empty, take the first intersection out and start making a simple polygon in the direction that has not been walked away over yet.
   while (isectQueue.length>0) {
