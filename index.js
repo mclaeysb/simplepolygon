@@ -5,10 +5,8 @@ var isects = require('2d-polygon-self-intersections');
 * Takes a complex (i.e. self-intersecting) polygon, and returns a MultiPolygon of the simple polygons it is composed of.
 *
 * @module simplepolygon
-* @param {(Feature|FeatureCollection)} feature input to be buffered
-* @param {Number} distance distance to draw the buffer
-* @param {String} unit 'miles', 'feet', 'kilometers', 'meters', or 'degrees'
-* @return {FeatureCollection<Polygon>|FeatureCollection<MultiPolygon>|Polygon|MultiPolygon} buffered features
+* @param {Feature} feature input polygon
+* @return {MultiPolygon} feature containing component simple polygons
 *
 * @example
 * var poly = {
@@ -16,15 +14,29 @@ var isects = require('2d-polygon-self-intersections');
 *   "properties": {},
 *   "geometry": {
 *     "type": "Polygon",
-*     "coordinates": [[[],[],[],[]]]
+*     "coordinates": [[[0,0],[2,0],[0,2],[2,2],[0,0]]]
 *   }
 * };
-* var unit = 'miles';
 *
-* var buffered = turf.buffer(pt, 500, unit);
-* var result = turf.featurecollection([buffered, pt]);
+* var result = simplepolygon(poly);
 *
-* //=result
+* // =result
+* // which will be
+* // {
+* //   "type": "Feature",
+* //   "geometry": {
+* //     "type": "MultiPolygon",
+* //     "coordinates": [
+* //       [[[0,0],[2,0],[1,1],[0,0]]],
+* //       [[[1,1],[0,2],[2,2],[1,1]]]
+* //     ]
+* //   },
+* //   "properties": {
+* //     "parent": [-1,-1],
+* //     "winding": [1,-1],
+* //     "netWinding": [1,-1]
+* //   }
+* // }
 */
 
 /*
@@ -41,11 +53,12 @@ var isects = require('2d-polygon-self-intersections');
   - inputPoly is a list of [x,y] coordinates, outputPolyArray is a list of a list of [x,y] coordinates. They are nested one step less than polygons in geojson, since we are not working with interior rings.
 
   Currently, intersections are computed using the isects package, from https://www.npmjs.com/package/2d-polygon-self-intersections
-	For n segments and k intersections,	this is O(n^2)
+	For n segments and k self-intersections, this is O(n^2)
   This is approximately the most expensive part of the algorithm
   It can be optimised to O((n + k) log n) through Bentley–Ottmann algorithm (which is an improvement for small k (k < o(n2 / log n)))
   See possibly https://github.com/e-cloud/sweepline
 	Future work this algorithm to allow interior LinearRing's and/or multipolygon input, since main.js should be enabled to handle multipolygon input.
+  The simplepolygon-algorithm itself has complexity O((n+2*k)*(n+k))
 
   This code differs from the algorithms and nomenclature of the article it is insired on in the following way:
   - No constructors are used, except 'PseudoVtx' and 'Isect'
@@ -85,14 +98,15 @@ var Isect = function (coord, edge1, edge2, nxtIsectAlongEdge1, nxtIsectAlongEdge
 
 module.exports = function(feature) {
 
-  var debug = true;
+  var debug = false;
 
   // Process input
+  if (feature.geometry.type != "Polygon") throw new Error("The input feature must be a Polygon");
   if (feature.geometry.coordinates.length>1) throw new Error("The input polygon may not have interior rings");
   var inputPoly = feature.geometry.coordinates[0]; // From here on work with the exterior LinearRing
   if (!inputPoly[0].equals(inputPoly[inputPoly.length-1])) inputPoly.push(inputPoly[0]) // Close polygon if it is not
   if (!inputPoly.slice(0,inputPoly.length-1).isUnique()) throw new Error("The input polygon may not have non-unique vertices (except for the last one)");
-  var numPolyVertices = inputPoly.length-1;
+  var numPolyVertices = inputPoly.length-1; // -1, because we ensured the polygon is closed
 
   // Compute self-intersections
   var selfIsectsData = [];
