@@ -6,7 +6,7 @@ var isects = require('2d-polygon-self-intersections');
 *
 * @module simplepolygon
 * @param {Feature} feature input polygon
-* @return {MultiPolygon} feature containing component simple polygons
+* @return {MultiPolygon} feature containing component simple polygons, including properties such as their parent polygon, winding number and net winding number
 *
 * @example
 * var poly = {
@@ -44,23 +44,32 @@ var isects = require('2d-polygon-self-intersections');
 
   Some notes:
   - The edges are oriented from their first to their second polygon vertrex
-  - At an intersection of two edges, two pseudo-vertices are present.
-  - A pseudo-vertex has an incomming and outgoing (crossing) edge. The edges which roles in the other pseudo-vertex
-  - At a polygon vertex, one pseudo-vertex is present.
+  - This algorithm employs the notion of 'pseudo-vertices' as outlined in the article
+  - At an intersection of two edges, one or two pseudo-vertices are present
+  - A pseudo-vertex has an incomming and outgoing (crossing) edge
+  - At a polygon vertex, one pseudo-vertex is present, at a self-intersection two
   - We use the terms 'polygon edge', 'polygon vertex', 'self-intersection vertex', 'intersection' (which includes polygon-vertex-intersection and self-intersection) and 'pseudo-vertex' (which includes 'polygon-pseudo-vertex' and 'intersection-pseudo-vertex')
   - The following objects are stored and passed by the index in the list between brackets: Polygon vertices and edges (inputPoly), intersections (isectList) and pseudo-vertices (pseudoVtxListByEdge)
   - The above, however, explains why pseudo-vertices have the property 'nxtIsectAlongEdgeIn' (which is easy to find out and used later for nxtIsectAlongEdge1 and nxtIsectAlongEdge2) in stead of some propery 'nxtPseudoVtxAlongEdgeOut'
   - inputPoly is a list of [x,y] coordinates, outputPolyArray is a list of a list of [x,y] coordinates. They are nested one step less than polygons in geojson, since we are not working with interior rings.
+  - The algorithm checks of the input has no interior rings.
+  - The algorithm checks of the input has no non-unique vertices. This is mainly to prevent self-intersecting input polygons such as [[0,0],[2,0],[1,1],[0,2],[1,3],[2,2],[1,1],[0,0]], whose self-intersections would not be detected. As such, many polygons which are non-simple, by the OGC definition, for other reasons then self-intersection, will not be allowed. An exception includes polygons with spikes or cuts such as [[0,0],[2,0],[1,1],[2,2],[0,2],[1,1],[0,0]], who are currently allowed and treated correctly, but make the output non-simple (by OGC definition). This could be prevented by checking for vertices on other edges.
+  - The resulting component polygons are simple (in the sense that they do not contain self-intersections) and two component polygons are either disjoint or one fully encloses the other
 
   Currently, intersections are computed using the isects package, from https://www.npmjs.com/package/2d-polygon-self-intersections
 	For n segments and k self-intersections, this is O(n^2)
-  This is approximately the most expensive part of the algorithm
+  This is one of the most expensive parts of the algorithm
   It can be optimised to O((n + k) log n) through Bentley–Ottmann algorithm (which is an improvement for small k (k < o(n2 / log n)))
   See possibly https://github.com/e-cloud/sweepline
+  Also, this step could be optimised using a spatial index
 	Future work this algorithm to allow interior LinearRing's and/or multipolygon input, since main.js should be enabled to handle multipolygon input.
-  The simplepolygon-algorithm itself has complexity O((n+2*k)*(n+k))
+  The complexity of the simplepolygon-algorithm itself can be decomposed as follows:
+  It includes a sorting step for the (s = n+2*k) pseudo-vertices (O(s*log(s))),
+  And a lookup comparing (n+k) intersections and (n+2*k) pseudo-vertices, with worst-case complexity O((n+2*k)*(n+k))
+  Additionally k is bounded by O(n^2)
 
   This code differs from the algorithms and nomenclature of the article it is insired on in the following way:
+  - The code was written based on the article, and not ported from the enclosed C/C++ code
   - No constructors are used, except 'PseudoVtx' and 'Isect'
   - 'LineSegments' of the polygon are called 'edges' here, and are represented, when necessary, by the index of their first point
   - 'edgeOut' is called 'l' in the article
@@ -130,9 +139,9 @@ module.exports = function(feature) {
     }
     feature.geometry.type = 'MultiPolygon';
     feature.geometry.coordinates = [feature.geometry.coordinates];
-    feature.properties.parent = -1;
-    feature.properties.winding = winding;
-    feature.properties.netWinding = winding;
+    feature.properties.parent = [-1];
+    feature.properties.winding = [winding];
+    feature.properties.netWinding = [winding];
     return feature;
   }
 
