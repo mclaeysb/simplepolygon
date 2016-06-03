@@ -48,7 +48,7 @@ var isects = require('../geojson-polygon-self-intersections');
   - A pseudo-vertex has an incomming and outgoing (crossing) edge
   - At a polygon vertex, one pseudo-vertex is present, at a self-intersection two
   - We use the terms 'polygon edge', 'polygon vertex', 'self-intersection vertex', 'intersection' (which includes polygon-vertex-intersection and self-intersection) and 'pseudo-vertex' (which includes 'polygon-pseudo-vertex' and 'intersection-pseudo-vertex')
-  - The following objects are stored and passed by the index in the list between brackets: Polygon vertices and edges (inputPoly), intersections (isectList) and pseudo-vertices (pseudoVtxListByEdge)
+  - The following objects are stored and passed by the index in the list between brackets: Polygon vertices and edges (inputPoly), intersections (isectList) and pseudo-vertices (pseudoVtxListByRingAndEdge)
   - The above, however, explains why pseudo-vertices have the property 'nxtIsectAlongEdgeIn' (which is easy to find out and used later for nxtIsectAlongEdge1 and nxtIsectAlongEdge2) in stead of some propery 'nxtPseudoVtxAlongEdgeOut'
   - inputPoly is a list of [x,y] coordinates, outputPolyArray is a list of a list of [x,y] coordinates. They are nested one step less than polygons in geojson, since we are not working with interior rings.
   - The algorithm checks of the input has no interior rings.
@@ -77,8 +77,8 @@ var isects = require('../geojson-polygon-self-intersections');
   - 'nxtIsectAlongEdgeIn' is called 'index'
   - 'edge1' and 'edge2' are named 'origin1' and 'origin2'
   - 'winding' is not implemented as a propoerty of an intersection, but as its own queue
-  - 'pseudoVtxListByEdge' is called 'polygonEdgeArray'
-  - 'pseudoVtxListByEdge' contains the polygon vertex at its end as the last item, and not the polygon vertex at its start as the first item
+  - 'pseudoVtxListByRingAndEdge' is called 'polygonEdgeArray'
+  - 'pseudoVtxListByRingAndEdge' contains the polygon vertex at its end as the last item, and not the polygon vertex at its start as the first item
   - 'isectList' is called 'intersectionList'
   - 'isectQueue' is called 'intersectioQueue'
 */
@@ -106,14 +106,15 @@ var Isect = function (coord, edge1, edge2, nxtIsectAlongEdge1, nxtIsectAlongEdge
 
 module.exports = function(feature) {
 
-  var debug = false;
+  var debug = true;
 
   // Process input
   if (feature.geometry.type != "Polygon") throw new Error("The input feature must be a Polygon");
   // TODO:
   // if (feature.geometry.coordinates.length>1) throw new Error("The input polygon may not have interior rings");
+  // TODO: this is new
+  var coord = feature.geometry.coordinates;
   var numRings = feature.geometry.coordinates.length;
-  // TODO: inputPoly
   var allVtx = [];
   for (var i = 0; i < numRings; i++) {
     var inputPoly = feature.geometry.coordinates[i];
@@ -123,83 +124,98 @@ module.exports = function(feature) {
     allVtx.push.apply(allVtx,inputPoly.slice(0,inputPoly.length-1));
   }
   if (!allVtx.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
-  // TODO: numPolyVertices
-  var numPolyVertices = allVtx.length;
-  // TODO: (this goes away)
+  // TODO: used?
+  var numPolyVertices = allVtx.length; // number of polygon vertices, with the last closing vertices not counted
+  // TODO: replace by feature.geometry.coordinates[i]
   var inputPoly = feature.geometry.coordinates[0];
+  // TODO: replace by feature.geometry.coordinates[i].length-1 or pseudoVtxListByRingAndEdge[i].length // or allVtx
+  var numPolyVertices = inputPoly.length-1;
+  // TODO: replace numRings by pseudoVtxListByRingAndEdge.length
 
-  // TODO: compute selfintersection for polygon with rings
+  // TODO: reorder selfIsectsData
   // Compute self-intersections
-  var selfIsectsData = [];
-  var selfIsectsData = isects(feature, 12, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
-    return [isect, edge0, start0, end0, edge1, start1, end1, unique, frac0, frac1];
-    //return [isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1];
-    //selfIsectsData.push([r, o, s0, e0, p, s1, e1, unique, ot, pt]);
+  var fpp = 10; // floating point precision
+  var selfIsectsData = isects(feature, fpp, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
+    return [isect, edge0, start0, end0, edge1, start1, end1, unique, frac0, frac1, ring0, ring1];
   });
   var numSelfIsect = selfIsectsData.length;
   console.log(selfIsectsData);
   console.log(numSelfIsect);
 
-  // If no self-intersections are found, we can simple return the feature as MultiPolygon, and compute its winding number
+  // If no self-intersections are found, we can simply return the feature as MultiPolygon, and compute its winding number
   if (numSelfIsect == 0) {
-    // Compute the winding number based on the vertex with the lowest x-value, it precessor and successor. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
-    var lowestVtx = 0;
-    for (var i = 0; i < numPolyVertices; i++) { if (inputPoly[i][0] < inputPoly[lowestVtx][0]) lowestVtx = i; }
-    if (isConvex([inputPoly[(lowestVtx-1).mod(numPolyVertices)],inputPoly[lowestVtx],inputPoly[(lowestVtx+1).mod(numPolyVertices)]],true)) {
-      var winding = 1;
-    } else {
-      var winding = -1;
+    var wind = winding(feature.geometry.coordinates[0]);
+    var outputParentArray = [-1];
+    var outputWindingArray = [wind];
+    var outputNetWindingArray = [wind];
+    for(var i = 1; i < numRings; i++) {
+      outputParentArray.push(0);
+      var wind = winding(feature.geometry.coordinates[i]);
+      outputWindingArray.push(wind);
+      outputNetWindingArray.push(outputWindingArray[0] + wind);
     }
     feature.geometry.type = 'MultiPolygon';
-    feature.geometry.coordinates = [feature.geometry.coordinates];
-    feature.properties.parent = [-1];
-    feature.properties.winding = [winding];
-    feature.properties.netWinding = [winding];
+    feature.geometry.coordinates = []
+    for(var i = 0; i < numRings; i++) {
+      feature.geometry.coordinates.push([feature.geometry.coordinates[i]])
+    }
+    feature.properties.parent = outputParentArray;
+    feature.properties.winding = outputWindingArray;
+    feature.properties.netWinding = outputNetWindingArray;
+
     return feature;
   }
 
   // Build intersection master list and polygon edge array
-  var pseudoVtxListByEdge = []; // An Array with for each edge an Array containing the pseudo-vertices (as made by their constructor) that have this edge as edgeIn, sorted by their fractional distance on this edge.
+  var pseudoVtxListByRingAndEdge = []; // An Array with for each edge an Array containing the pseudo-vertices (as made by their constructor) that have this edge as edgeIn, sorted by their fractional distance on this edge.
   var isectList = []; // An Array containing intersections (as made by their constructor). First all polygon-vertex-intersections, then all self-intersections. The order of the latter is not important but is permanent once given.
-  // Push polygon-pseudo-vertex to pseudoVtxListByEdge and polygon-vertex-intersections to isectList
-  for (var i = 0; i < numPolyVertices; i++) {
-    // Each edge will feature one polygon-pseudo-vertex in its array, on the last position. I.e. edge i features the polygon-pseudo-vertex of the polygon vertex i+1, with edgeIn = i, on the last position.
-  	pseudoVtxListByEdge.push([new PseudoVtx(inputPoly[(i+1).mod(numPolyVertices)], 1, i, (i+1).mod(numPolyVertices), undefined)]);
-    // The first numPolyVertices elements in isectList correspong to the polygon-vertex-intersections
-    isectList.push(new Isect(inputPoly[i], (i-1).mod(numPolyVertices), i, undefined, undefined, false, true));
+  // Push polygon-pseudo-vertex to pseudoVtxListByRingAndEdge and polygon-vertex-intersections to isectList
+
+  for (var i = 0; i < numRings; i++) {
+    pseudoVtxListByRingAndEdge.push([]);
+    for (var j = 0; j < feature.geometry.coordinates[i].length-1; j++) {
+      // Each edge will feature one polygon-pseudo-vertex in its array, on the last position. i.e. edge j features the polygon-pseudo-vertex of the polygon vertex j+1, with edgeIn = j, on the last position.
+    	pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).mod(feature.geometry.coordinates[i].length-1)], 1, j, (j+1).mod(feature.geometry.coordinates[i].length-1), undefined)]);
+      // The first numPolyVertices elements in isectList correspong to the polygon-vertex-intersections
+      isectList.push(new Isect(feature.geometry.coordinates[i][j], (j-1).mod(feature.geometry.coordinates[i].length-1), j, undefined, undefined, false, true));
+    }
   }
-  // Push intersection-pseudo-vertices to pseudoVtxListByEdge and self-intersections to isectList
+  // Push intersection-pseudo-vertices to pseudoVtxListByRingAndEdge and self-intersections to isectList
   for (var i = 0; i < numSelfIsect; i++) {
-    // Add intersection-pseudo-vertex made using selfIsectsData to pseudoVtxListByEdge's array corresponding to the incomming edge
-    pseudoVtxListByEdge[selfIsectsData[i][1]].push(new PseudoVtx(selfIsectsData[i][0], selfIsectsData[i][8], selfIsectsData[i][1], selfIsectsData[i][4], undefined));
+    // Add intersection-pseudo-vertex made using selfIsectsData to pseudoVtxListByRingAndEdge's array corresponding to the incomming edge
+    pseudoVtxListByRingAndEdge[selfIsectsData[i][10]][selfIsectsData[i][1]].push(new PseudoVtx(selfIsectsData[i][0], selfIsectsData[i][8], selfIsectsData[i][1], selfIsectsData[i][4], undefined));
     // selfIsectsData contains double mentions of each intersection, but we only want to add them once to isectList
     if (selfIsectsData[i][7]) isectList.push(new Isect(selfIsectsData[i][0], selfIsectsData[i][1], selfIsectsData[i][4], undefined, undefined, true, true));
   }
   var numIsect = isectList.length;
-  // Sort Arrays of pseudoVtxListByEdge by the fraction distance 'param' using compare function
-  for (var i = 0; i < numPolyVertices; i++) {
-    pseudoVtxListByEdge[i].sort(function(a, b){
-    if(a.param < b.param) return -1;
-    if(a.param > b.param) return 1;
-    return 0;
-    });
+  // Sort Arrays of pseudoVtxListByRingAndEdge by the fraction distance 'param' using compare function
+  for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++) {
+    for (var j = 0; j < pseudoVtxListByRingAndEdge[i].length; j++) {
+      pseudoVtxListByRingAndEdge[i][j].sort(function(a, b){
+      if(a.param < b.param) return -1;
+      if(a.param > b.param) return 1;
+      return 0;
+      });
+    }
   }
 
-  // Find 'nxtIsect' for each pseudo-vertex in pseudoVtxListByEdge
+  // Find 'nxtIsect' for each pseudo-vertex in pseudoVtxListByRingAndEdge
   // Do this by comparing coordinates to isectList
-  for (var i = 0; i < numPolyVertices; i++){
-    for (var j = 0; j < pseudoVtxListByEdge[i].length; j++){
-      var foundNextIsect = false;
-      for (var k = 0; (k < numIsect) && !foundNextIsect; k++) {
-        if (j == pseudoVtxListByEdge[i].length-1) {
-          if (isectList[k].coord.equals(pseudoVtxListByEdge[(i+1).mod(numPolyVertices)][0].coord)) {
-            pseudoVtxListByEdge[i][j].nxtIsectAlongEdgeIn = k; // For polygon-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along edgeOut. This is dealt with correctly in the next block.
-            foundNextIsect = true;
-          }
-        } else {
-          if (isectList[k].coord.equals(pseudoVtxListByEdge[i][j+1].coord)) {
-            pseudoVtxListByEdge[i][j].nxtIsectAlongEdgeIn = k;
-            foundNextIsect = true;
+  for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++){
+    for (var j = 0; j < pseudoVtxListByRingAndEdge[i].length; j++){
+      for (var k = 0; k < pseudoVtxListByRingAndEdge[i][j].length; k++){
+        var foundNextIsect = false;
+        for (var l = 0; (l < numIsect) && !foundNextIsect; l++) {
+          if (k == pseudoVtxListByRingAndEdge[i][j].length-1) {
+            if (isectList[l].coord.equals(pseudoVtxListByRingAndEdge[i][(j+1).mod(coord[i].length-1)][0].coord)) {
+              pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l; // For polygon-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along edgeOut. This is dealt with correctly in the next block.
+              foundNextIsect = true;
+            }
+          } else {
+            if (isectList[l].coord.equals(pseudoVtxListByRingAndEdge[i][j][k+1].coord)) {
+              pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l;
+              foundNextIsect = true;
+            }
           }
         }
       }
@@ -207,22 +223,28 @@ module.exports = function(feature) {
   }
 
   // Find ('nxtIsectAlongEdge1' and) 'nxtIsectAlongEdge2' for each intersection in isectList
-  // For polygon-vertex-intersections, find 'nxtIsectAlongEdge2' the pseudo-vertex corresponding to intersection i is the last element of in the Array of pseudoVtxListByEdge corresponding to the (i-1)-th edge. Whe can this find the next intersection there, and correct the misnaming that happened in the previous block, since edgeOut = edge2 for polygon vertices.
-  for (var i = 0; i < numPolyVertices; i++) {
-    isectList[i].nxtIsectAlongEdge2 = pseudoVtxListByEdge[(i-1).mod(numPolyVertices)][pseudoVtxListByEdge[(i-1).mod(numPolyVertices)].length-1].nxtIsectAlongEdgeIn;
+  // For polygon-vertex-intersections, find 'nxtIsectAlongEdge2' the pseudo-vertex corresponding to intersection i is the last element of in the Array of pseudoVtxListByRingAndEdge corresponding to the (i-1)-th edge. Whe can this find the next intersection there, and correct the misnaming that happened in the previous block, since edgeOut = edge2 for polygon vertices.
+  var i = 0;
+  for (var j = 0; j < pseudoVtxListByRingAndEdge.length; j++) {
+    for (var k = 0; k < pseudoVtxListByRingAndEdge[j].length; k++) {
+      isectList[i].nxtIsectAlongEdge2 = pseudoVtxListByRingAndEdge[j][(k-1).mod(pseudoVtxListByRingAndEdge[j].length)][pseudoVtxListByRingAndEdge[j][(k-1).mod(pseudoVtxListByRingAndEdge[j].length)].length-1].nxtIsectAlongEdgeIn;
+      i++
+    }
   }
-  // For self-intersections, find 'nxtIsectAlongEdge1' and 'nxtIsectAlongEdge2' by comparing coordinates to pseudoVtxListByEdge and looking at the nxtIsectAlongEdgeIn property, depending on how the edges are labeled in the pseudo-vertex
+  // For self-intersections, find 'nxtIsectAlongEdge1' and 'nxtIsectAlongEdge2' by comparing coordinates to pseudoVtxListByRingAndEdge and looking at the nxtIsectAlongEdgeIn property, depending on how the edges are labeled in the pseudo-vertex
   for (var i = numPolyVertices; i < numIsect; i++) {
     var foundEgde1In = foundEgde2In = false;
-    for (var j = 0; (j < numPolyVertices) && !(foundEgde1In && foundEgde2In); j++) {
-      for (var k = 0; (k < pseudoVtxListByEdge[j].length) && !(foundEgde1In && foundEgde2In); k++) {
-        if (isectList[i].coord.equals(pseudoVtxListByEdge[j][k].coord)) { // This will happen twice
-          if (isectList[i].edge1 == pseudoVtxListByEdge[j][k].edgeIn) {
-            isectList[i].nxtIsectAlongEdge1 = pseudoVtxListByEdge[j][k].nxtIsectAlongEdgeIn;
-             foundEgde1In = true;
-          } else {
-            isectList[i].nxtIsectAlongEdge2 = pseudoVtxListByEdge[j][k].nxtIsectAlongEdgeIn;
-            foundEgde2In = true;
+    for (var j = 0; (j < pseudoVtxListByRingAndEdge.length) && !(foundEgde1In && foundEgde2In); j++) {
+      for (var k = 0; (k < pseudoVtxListByRingAndEdge[j].length) && !(foundEgde1In && foundEgde2In); k++) {
+        for (var l = 0; (l < pseudoVtxListByRingAndEdge[j][k].length) && !(foundEgde1In && foundEgde2In); l++) {
+          if (isectList[i].coord.equals(pseudoVtxListByRingAndEdge[j][k][l].coord)) { // This will happen twice
+            if (isectList[i].edge1 == pseudoVtxListByRingAndEdge[j][k][l].edgeIn) {
+              isectList[i].nxtIsectAlongEdge1 = pseudoVtxListByRingAndEdge[j][k][l].nxtIsectAlongEdgeIn;
+               foundEgde1In = true;
+            } else {
+              isectList[i].nxtIsectAlongEdge2 = pseudoVtxListByRingAndEdge[j][k][l].nxtIsectAlongEdgeIn;
+              foundEgde2In = true;
+            }
           }
         }
       }
@@ -230,29 +252,29 @@ module.exports = function(feature) {
   }
 
   // Find the polygon vertex with lowest x-value. This vertex's intersection is certainly part of only one outermost simple polygon
-  var firstPolyFirstIsect = 0;
+  var firstPolyFistIsect = 0;
   for (var i = 0; i < numPolyVertices; i++) {
-    if (inputPoly[i][0] < inputPoly[firstPolyFirstIsect][0]) {
-      firstPolyFirstIsect = i;
+    if (isectList[i].coord[0] < isectList[firstPolyFistIsect].coord[0]) {
+      firstPolyFistIsect = i;
     }
   }
   // Find the intersection before and after it
-  var firstPolySecondIsect = isectList[firstPolyFirstIsect].nxtIsectAlongEdge2;
+  var firstPolySecondIsect = isectList[firstPolyFistIsect].nxtIsectAlongEdge2;
   for (var i = 0; i < isectList.length; i++) {
-    if ((isectList[i].nxtIsectAlongEdge1 == firstPolyFirstIsect) || (isectList[i].nxtIsectAlongEdge2 == firstPolyFirstIsect)) {
+    if ((isectList[i].nxtIsectAlongEdge1 == firstPolyFistIsect) || (isectList[i].nxtIsectAlongEdge2 == firstPolyFistIsect)) {
       var firstPolyLastIsect = i;
       break
     }
   }
   // Use them to determine the winding number of this first polygon. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
-  if (isConvex([isectList[firstPolyLastIsect].coord,isectList[firstPolyFirstIsect].coord,isectList[firstPolySecondIsect].coord],true)) {
+  if (isConvex([isectList[firstPolyLastIsect].coord,isectList[firstPolyFistIsect].coord,isectList[firstPolySecondIsect].coord],true)) {
     firstPolyWinding = 1;
   } else {
     firstPolyWinding = -1;
   }
 
   // Initialise the queues
-  var isectQueue = [firstPolyFirstIsect]; // Queue of intersections to start new simple polygon from
+  var isectQueue = [firstPolyFistIsect]; // Queue of intersections to start new simple polygon from
   var parentQueue = [-1]; // Queue of the parent polygon of polygon started from the corresponding intersection in the isectQueue
   var windingQueue = [firstPolyWinding];
 
@@ -421,4 +443,17 @@ function isConvex(pts, righthanded){
   if (pts.length != 3) throw new Error("This function requires an array of three points [x,y]");
   var d = (pts[1][0] - pts[0][0]) * (pts[2][1] - pts[0][1]) - (pts[1][1] - pts[0][1]) * (pts[2][0] - pts[0][0]);
   return (d >= 0) == righthanded;
+}
+
+// Function to compute winding of simple, non-self-intersecting polygon (ring is an array of [x,y] pairs with the last equal to the first)
+function winding(ring){
+  // Compute the winding number based on the vertex with the lowest x-value, it precessor and successor. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
+  var lowestVtx = 0;
+  for (var i = 0; i < ring.length-1; i++) { if (ring[i][0] < ring[lowestVtx][0]) lowestVtx = i; }
+  if (isConvex([ring[(lowestVtx-1).mod(ring.length-1)],ring[lowestVtx],ring[(lowestVtx+1).mod(ring.length-1)]],true)) {
+    var winding = 1;
+  } else {
+    var winding = -1;
+  }
+  return winding
 }
