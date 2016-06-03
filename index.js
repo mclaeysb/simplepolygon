@@ -1,5 +1,4 @@
-var fs = require('fs');
-var isects = require('2d-polygon-self-intersections');
+var isects = require('../geojson-polygon-self-intersections');
 
 /**
 * Takes a complex (i.e. self-intersecting) polygon, and returns a MultiPolygon of the simple polygons it is composed of.
@@ -111,21 +110,35 @@ module.exports = function(feature) {
 
   // Process input
   if (feature.geometry.type != "Polygon") throw new Error("The input feature must be a Polygon");
-  if (feature.geometry.coordinates.length>1) throw new Error("The input polygon may not have interior rings");
-  var inputPoly = feature.geometry.coordinates[0]; // From here on work with the exterior LinearRing
-  if (!inputPoly[0].equals(inputPoly[inputPoly.length-1])) inputPoly.push(inputPoly[0]) // Close polygon if it is not
-  if (!inputPoly.slice(0,inputPoly.length-1).isUnique()) throw new Error("The input polygon may not have non-unique vertices (except for the last one)");
-  var numPolyVertices = inputPoly.length-1; // -1, because we ensured the polygon is closed
+  // TODO:
+  // if (feature.geometry.coordinates.length>1) throw new Error("The input polygon may not have interior rings");
+  var numRings = feature.geometry.coordinates.length;
+  // TODO: inputPoly
+  var allVtx = [];
+  for (var i = 0; i < numRings; i++) {
+    var inputPoly = feature.geometry.coordinates[i];
+    if (!inputPoly[0].equals(inputPoly[inputPoly.length-1])) {
+      inputPoly.push(inputPoly[0]) // Close polygon if it is not
+    }
+    allVtx.push.apply(allVtx,inputPoly.slice(0,inputPoly.length-1));
+  }
+  if (!allVtx.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
+  // TODO: numPolyVertices
+  var numPolyVertices = allVtx.length;
+  // TODO: (this goes away)
+  var inputPoly = feature.geometry.coordinates[0];
 
+  // TODO: compute selfintersection for polygon with rings
   // Compute self-intersections
   var selfIsectsData = [];
-  var selfIsectsPoints = isects(inputPoly, function filterFn(r, o, s0, e0, p, s1, e1, unique){
-    // Compute fractional distance of each self-intersection on both its polygon edges o and p: ot and pt in [0,1]
-    var ot = (r[0]-s0[0])/(e0[0]-s0[0]); // or equally: (r[1]-s0[1])/(e0[1]-s0[1])
-    var pt = (r[0]-s1[0])/(e1[0]-s1[0]); // or equally: (r[1]-s1[1])/(e1[1]-s1[1]))
-    selfIsectsData.push([r, o, s0, e0, p, s1, e1, unique, ot, pt]);
+  var selfIsectsData = isects(feature, 12, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
+    return [isect, edge0, start0, end0, edge1, start1, end1, unique, frac0, frac1];
+    //return [isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1];
+    //selfIsectsData.push([r, o, s0, e0, p, s1, e1, unique, ot, pt]);
   });
   var numSelfIsect = selfIsectsData.length;
+  console.log(selfIsectsData);
+  console.log(numSelfIsect);
 
   // If no self-intersections are found, we can simple return the feature as MultiPolygon, and compute its winding number
   if (numSelfIsect == 0) {
@@ -388,7 +401,7 @@ Array.prototype.getUnique = function(){
    return a;
 }
 
-// Method to check if array is unique
+// Method to check if array is unique (i.e. all unique elements, i.e. no duplicate elements)
 Array.prototype.isUnique = function(){
    var u = {}, a = [];
    var isUnique = 1;
