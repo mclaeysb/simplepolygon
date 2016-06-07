@@ -1,12 +1,14 @@
 var isects = require('../geojson-polygon-self-intersections');
 var helpers = require('turf-helpers');
+var within = require('turf-within');
+var area = require('turf-area');
 
 /**
-* Takes a complex (i.e. self-intersecting) polygon, and returns a MultiPolygon of the simple polygons it is composed of.
+* Takes a complex (i.e. self-intersecting) polygon, and breaks it down into its composite simple polygons.
 *
 * @module simplepolygon
-* @param {Feature} feature input polygon
-* @return {MultiPolygon} feature containing component simple polygons, including properties such as their parent polygon, winding number and net winding number
+* @param {Feature} feature input polygon. This feature may break with {@link http://geojson.org/geojson-spec.html|geojson specs} in the sense that it's inner and outer rings may intersect or self-intersect.
+* @return {FeatureCollection} Feature collection containing the simple polygon features the complex polygon is composed of. These simple polygons only including their properties such as their parent polygon, winding number and net winding number
 *
 * @example
 * var poly = {
@@ -106,7 +108,7 @@ var Isect = function (coord, ringAndEdge1, ringAndEdge2, nxtIsectAlongRingAndEdg
 
 module.exports = function(feature) {
 
-  var debug = false;
+  var debug = true;
 
   // Process input
   if (feature.geometry.type != "Polygon") throw new Error("The input feature must be a Polygon");
@@ -131,30 +133,33 @@ module.exports = function(feature) {
   // TODO: replace numRings by pseudoVtxListByRingAndEdge.length
   // TODO: make variable 'poly' for feature.geometry.coordinates at the beginning, and find replace?
   // TODO: change name 'poly' to 'ring' everywhere, also in comments, and explains why not 'polygons'
+  // TODO: add to comments: extra layer for rings. + Simple polygon, even stricter: only outer ring
+  // TODO: add all polygon vertex intersections to isectQueue (and remove them too) such that inner rings without self-interections are also traversed
 
   // TODO: reorder selfIsectsData. Also reorder isect: walkable after edge
   // Compute self-intersections
-  var fpp = 10; // floating point precision
-  var selfIsectsData = isects(feature, fpp, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, ringAndEdge1, start1, end1, frac1, unique){
+  var selfIsectsData = isects(feature, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, ringAndEdge1, start1, end1, frac1, unique){
     return [isect, edge0, start0, end0, ringAndEdge1, start1, end1, unique, frac0, frac1, ring0, ring1];
   });
   var numSelfIsect = selfIsectsData.length;
 
+  /*
   // If no self-intersections are found, we can simply return the feature as MultiPolygon, and compute its winding number
   if (numSelfIsect == 0) {
-    var outerRingWinding = winding(feature.geometry.coordinates[0]);
-    var outputFeatures = [helpers.polygon([feature.geometry.coordinates[0]],{parent: -1, winding: outerRingWinding, netWinding: outerRingWinding})];
+    var outerRingWinding = windingOfRing(feature.geometry.coordinates[0]);
+    var outputFeatureArray = [helpers.polygon([feature.geometry.coordinates[0]],{parent: -1, winding: outerRingWinding, netWinding: outerRingWinding})];
     for(var i = 1; i < numRings; i++) {
-      var currentRingWinding = winding(feature.geometry.coordinates[i]);
-      outputFeatures.push(helpers.polygon([feature.geometry.coordinates[i]],{parent: 0, winding: currentRingWinding, netWinding: outerRingWinding + currentRingWinding}));
+      var currentRingWinding = windingOfRing(feature.geometry.coordinates[i]);
+      outputFeatureArray.push(helpers.polygon([feature.geometry.coordinates[i]],{parent: 0, winding: currentRingWinding, netWinding: outerRingWinding + currentRingWinding}));
     }
-    return helpers.featureCollection(outputFeatures);
+    return helpers.featureCollection(outputFeatureArray);
   }
+  */
 
   // Build pseudo vertex list and intersection list
   var pseudoVtxListByRingAndEdge = []; // An Array with for each edge an Array containing the pseudo-vertices (as made by their constructor) that have this edge as ringAndEdgeIn, sorted by their fractional distance on this edge.
   var isectList = []; // An Array containing intersections (as made by their constructor). First all polygon-vertex-intersections, then all self-intersections. The order of the latter is not important but is permanent once given.
-  // Push polygon-pseudo-vertex to pseudoVtxListByRingAndEdge and polygon-vertex-intersections to isectList
+  // Push polygon-pseudo-vertices to pseudoVtxListByRingAndEdge and polygon-vertex-intersections to isectList
   for (var i = 0; i < numRings; i++) {
     pseudoVtxListByRingAndEdge.push([]);
     for (var j = 0; j < feature.geometry.coordinates[i].length-1; j++) {
@@ -235,47 +240,60 @@ module.exports = function(feature) {
     }
   }
 
-  // Find the polygon vertex with lowest x-value. This vertex's intersection is certainly part of only one outermost simple polygon
-  var firstRingFistIsect = 0;
-  for (var i = 0; i < numPolyVertices; i++) {
-    if (isectList[i].coord[0] < isectList[firstRingFistIsect].coord[0]) {
-      firstRingFistIsect = i;
-    }
-  }
-  // Find the intersection before and after it
-  var firstRingSecondIsect = isectList[firstRingFistIsect].nxtIsectAlongRingAndEdge2;
-  for (var i = 0; i < isectList.length; i++) {
-    if ((isectList[i].nxtIsectAlongRingAndEdge1 == firstRingFistIsect) || (isectList[i].nxtIsectAlongRingAndEdge2 == firstRingFistIsect)) {
-      var firstRingLastIsect = i;
-      break
-    }
-  }
-  // Use them to determine the winding number of this first polygon. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
-  if (isConvex([isectList[firstRingLastIsect].coord,isectList[firstRingFistIsect].coord,isectList[firstRingSecondIsect].coord],true)) {
-    firstRingWinding = 1;
-  } else {
-    firstRingWinding = -1;
-  }
 
   // Initialise the queues
-  var isectQueue = [firstRingFistIsect]; // Queue of intersections to start new simple polygon from
-  var parentQueue = [-1]; // Queue of the parent polygon of polygon started from the corresponding intersection in the isectQueue
-  var windingQueue = [firstRingWinding];
+  // Queue of intersections to start new simple polygon from. For each ring, the polygon-vertex-intersections with the lowest x-value will be added. If it will be encountered while walking, it will be removed. If after finishing all walks initiated by the first intersection popped from this queue it has not been encountered, it will still be in the queue and a new set of walks will be initiated from it.
+  var isectQueue = [];
+  // Queue of the parent polygon of the polygon started from the corresponding intersection in the isectQueue. For now, we assume that the (outer) simple polygons initiated from a polygon-vertex-intersections have no parent. If these polygons happen to lie within other simple polygons (with which they don't touch or intersect), this will be corrected for later.
+  var parentQueue = [];
+  var windingQueue = [];
+  // For each ring, add the polygon-vertex-intersection with the lowest x-value, and its corresponding parent and winding number to the queue.
+  var i = 0;
+  for (var j = 0; j < numRings; j++) {
+    var lowestIsect = i;
+    for (var k = 0; k < feature.geometry.coordinates[j].length-1; k++) {
+      if (isectList[i].coord[0] < isectList[lowestIsect].coord[0]) {
+        lowestIsect = i;
+      }
+      i++;
+    }
+    // Compute winding at the lowest polygon-vertex-intersection. We thus this by using our knowledge that this extremal vertex must be a convex vertex.
+    // Find the intersection before and after it
+    var isectAfterLowestIsect = isectList[lowestIsect].nxtIsectAlongRingAndEdge2;
+    for (var k = 0; k < isectList.length; k++) {
+      if ((isectList[k].nxtIsectAlongRingAndEdge1 == lowestIsect) || (isectList[k].nxtIsectAlongRingAndEdge2 == lowestIsect)) {
+        var isectBeforeLowestIsect = k;
+        break
+      }
+    }
+    // Use them to determine the winding number of this first polygon. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
+    var windingAtIsect = isConvex([isectList[isectBeforeLowestIsect].coord,isectList[lowestIsect].coord,isectList[isectAfterLowestIsect].coord],true) ? 1 : -1;
+
+    isectQueue.push(lowestIsect);
+    parentQueue.push(-1);
+    windingQueue.push(windingAtIsect);
+  }
+
+  if (debug) console.log("The queues are initiated as follows:");
+  if (debug) console.log(isectQueue);
+  if (debug) console.log(parentQueue);
+  if (debug) console.log(windingQueue);
 
   // Initialise output
-  var outputFeatures = [];
+  var outputFeatureArray = [];
 
   // While intersection queue is not empty, take the first intersection out and start making a simple polygon in the direction that has not been walked away over yet.
   while (isectQueue.length>0) {
-    // Get the first objects out of the queue
-    var startIsect = isectQueue.shift();
-    var currentRingParent = parentQueue.shift();
-    var currentRingWinding = windingQueue.shift();
-    var currentRingNetWinding = (currentRingParent == -1) ? currentRingWinding : outputFeatures[currentRingParent].properties.winding + currentRingWinding;
+    // Get the last objects out of the queue
+    var startIsect = isectQueue.pop();
+    var currentRingParent = parentQueue.pop();
+    var currentRingWinding = windingQueue.pop();
+    //var currentRingNetWinding = (currentRingParent == -1) ? currentRingWinding : outputFeatureArray[currentRingParent].properties.winding + currentRingWinding;
     // Make new output ring and add vertex from starting intersection
-    var currentRing = outputFeatures.length-1;
+    var currentRing = outputFeatureArray.length;
     var currentRingCoords = [isectList[startIsect].coord];
-    if (debug) console.log("# Now at ring number "+(outputFeatures.length-1));
+    if (debug) console.log("# Now starting ring number "+outputFeatureArray.length+" from intersection "+startIsect);
+    if (debug) if (startIsect < numPolyVertices) console.log("This is a polygon-vertex-intersections, which means this ring does not touch existing rings");
     // Set up the variables used while walking through intersections: 'currentIsect', 'nxtIsect' and 'walkingRingAndEdge'
     var currentIsect = startIsect;
     if (isectList[startIsect].ringAndEdge1Walkable) {
@@ -312,6 +330,7 @@ module.exports = function(feature) {
             parentQueue.push(currentRingParent);
             windingQueue.push(-currentRingWinding);
           } else {
+            console.log("--- a");
             parentQueue.push(currentRing);
             windingQueue.push(currentRingWinding);
           }
@@ -328,6 +347,11 @@ module.exports = function(feature) {
             parentQueue.push(currentRingParent);
             windingQueue.push(-currentRingWinding);
           } else {
+            console.log("--- b");
+            console.log(currentRingWinding);
+            console.log(currentIsect, nxtIsect, isectList[nxtIsect].nxtIsectAlongRingAndEdge1);
+            console.log([isectList[currentIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongRingAndEdge1].coord]);
+            console.log(isConvex([isectList[currentIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongRingAndEdge1].coord],currentRingWinding == 1));
             parentQueue.push(currentRing);
             windingQueue.push(currentRingWinding);
           }
@@ -337,12 +361,68 @@ module.exports = function(feature) {
         nxtIsect = isectList[nxtIsect].nxtIsectAlongRingAndEdge1;
       }
     }
+    if (debug) console.log("Walking from intersection "+currentIsect+" to "+nxtIsect+" over ring "+walkingRingAndEdge[0]+" and edge "+walkingRingAndEdge[1]+" and closing ring");
     currentRingCoords.push(isectList[nxtIsect].coord); // close ring
-    outputFeatures.push(helpers.polygon([currentRingCoords],{parent: currentRingParent, winding: currentRingWinding, netWinding: currentRingNetWinding}));
+    var currentRingNetWinding = undefined
+    outputFeatureArray.push(helpers.polygon([currentRingCoords],{index: currentRing, parent: currentRingParent, winding: currentRingWinding, netWinding: currentRingNetWinding}));
   }
-  if (debug) console.log("# Total of "+outputFeatures.length+" rings");
 
-  return helpers.featureCollection(outputFeatures);
+  var output = helpers.featureCollection(outputFeatureArray);
+
+  var featuresWithoutParent = [];
+  for (var i = 0; i < output.features.length; i++) {
+    console.log("Ring "+i+" has parent "+output.features[i].properties.parent);
+    if (output.features[i].properties.parent == -1) featuresWithoutParent.push(i);
+  }
+  if (debug) console.log("The following output ring(s) have no parent: "+featuresWithoutParent);
+  if (featuresWithoutParent.length > 1) {
+    for (var i = 0; i < featuresWithoutParent.length; i++) {
+      var parent = -1;
+      var parentArea = Infinity;
+      for (var j = 0; j < output.features.length; j++) {
+        if (i == j) continue
+        if (within(helpers.featureCollection([helpers.point(output.features[featuresWithoutParent[i]].geometry.coordinates[0][0])]),helpers.featureCollection([outputFeatureArray[j]])).features.length == 1) {
+          if (area(output.features[j]) < parentArea) {
+            parent = j;
+            if (debug) console.log("Ring "+featuresWithoutParent[i]+" lies within ring "+j);
+          }
+        }
+      }
+      output.features[i].properties.parent = parent;
+      if (debug) console.log("Ring "+i+" is assigned parent "+parent);
+    }
+  }
+
+  for (var i = 0; i < output.features.length; i++) {
+    if (output.features[i].properties.parent == -1) {
+      // TODO: remove this check
+      if (debug) if (windingOfRing(output.features[i].geometry.coordinates[0]) != output.features[i].properties.winding) console.log("ERROR: previously computed winding was wrong");
+      var netWinding = output.features[i].properties.winding
+      output.features[i].properties.netWinding = netWinding;
+      setNetWindingOfChildren(i,netWinding)
+    }
+  }
+
+  function setNetWindingOfChildren(parent,ParentNetWinding){
+    for (var i = 0; i < output.features.length; i++) {
+      if (output.features[i].properties.parent == parent){
+        var netWinding = ParentNetWinding + output.features[i].properties.winding
+        output.features[i].properties.netWinding = netWinding;
+        setNetWindingOfChildren(i,netWinding)
+      }
+    }
+  }
+
+
+  // list which have parent -1 (here you will miss efficientcy of -1 creater by flipping: all those started from same polyvertex will be treated the same here)
+  // if more than one, for those, check which is the smalles polygon (ring) they lie in (by storing this index and surface), and attrubute its parrent
+  // for all that where in no-one and still have parent -1: compute netWinding downwards => more efficiently if sorted by parent first, then looking from index of parent
+
+  // remove creator and flipWinding
+
+  if (debug) console.log("# Total of "+output.features.length+" rings");
+
+  return output;
 }
 
 
@@ -419,7 +499,7 @@ function isConvex(pts, righthanded){
 }
 
 // Function to compute winding of simple, non-self-intersecting polygon (ring is an array of [x,y] pairs with the last equal to the first)
-function winding(ring){
+function windingOfRing(ring){
   // Compute the winding number based on the vertex with the lowest x-value, it precessor and successor. An extremal vertex of a simple polygon is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
   var lowestVtx = 0;
   for (var i = 0; i < ring.length-1; i++) { if (ring[i][0] < ring[lowestVtx][0]) lowestVtx = i; }
