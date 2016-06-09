@@ -7,7 +7,7 @@ var area = require('turf-area');
 * Takes a complex (i.e. self-intersecting) geojson polygon, and breaks it down into its composite simple, non-self-intersecting one-ring polygons.
 *
 * @module simplepolygon
-* @param {Feature} feature input polygon. This feature may be unconform the {@link http://geojson.org/geojson-spec.html|geojson specs} in the sense that it's inner and outer rings may cross-intersect or self-intersect, and that the outer ring must not contain the optional inner rings.
+* @param {Feature} feature input polygon. This feature may be unconform the {@link http://geojson.org/geojson-spec.html|geojson specs} in the sense that it's inner and outer rings may cross-intersect or self-intersect, that the outer ring must not contain the optional inner rings and that the winding number must not be positive for the outer and negative for the inner rings.
 * @return {FeatureCollection} Feature collection containing the simple, non-self-intersecting one-ring polygon features that the complex polygon is composed of. These simple polygons have properties such as their parent polygon, winding number and net winding number.
 *
 * @example
@@ -30,6 +30,7 @@ var area = require('turf-area');
   This algorithm walks from intersections (i.e. a vertex of an input ring or a self- or cross-intersection of those ring(s)) to intersection over (rings and) edges in their original direction, and while walking traces simple, non-self-intersecting one-ring polygons by storing the vertices along the way. This is possible since each intersection knows which is the next one given the incomming walking edge. When walking, the algorithm also stores where it has walked (since we must only walk over each (part of an) edge once), and keeps track of intersections that are new and from where another walk (and hence simple polygon) could be initiated. The resulting simple, one-ring polygons cover all input edges exactly once and don't self- or cross-intersect (but can touch at intersections). Hence, they form a set of nested rings.
 
   Some notes on the algorithm:
+  - We will talk about rings (arrays of [x,y]) and polygons (array of rings). The geojson spec requires rings to be non-self- and non-cross-intersecting, but here the intput rings can self- and cross-intersect (inter and intra ring). The output rings can't, since they are conform the spec. Therefore will talk about 'input rings' or simply 'rings' (non-conform), 'output rings' (conform) and more generally 'simple, non-self or cross-intersecting rings' (conform)
   - We say that a polygon self-intersects when it's rings either self-intersect of cross-intersect
   - Edges are oriented from their first to their second ring vertrex. Hence, ring i edge j goes from vertex j to j+1. This direction or orientation of an egde is kept unchanged during the algorithm. We will only walk along this direction
   - This algorithm employs the notion of 'pseudo-vertices' and 'intersections' as outlined in the article
@@ -40,6 +41,7 @@ var area = require('turf-area');
   - The following objects are stored and passed by the index in the list between brackets: intersections (isectList) and pseudo-vertices (pseudoVtxListByRingAndEdge)
   - The algorithm checks of the input has no non-unique vertices. This is mainly to prevent self-intersecting input polygons such as [[0,0],[2,0],[1,1],[0,2],[1,3],[2,2],[1,1],[0,0]], whose self-intersections would not be detected. As such, many polygons which are non-simple, by the OGC definition, for other reasons then self-intersection, will not be allowed. An exception includes polygons with spikes or cuts such as [[0,0],[2,0],[1,1],[2,2],[0,2],[1,1],[0,0]], who are currently allowed and treated correctly, but make the output non-simple (by OGC definition). This could be prevented by checking for vertices on other edges.
   - The resulting component polygons are one-ring and simple (in the sense that their ring does not contain self-intersections) and two component simple polygons are either disjoint, touching in one or multiple vertices, or one fully encloses the other
+  - This algorithm takes geojson as input, be was developped for a euclidean (and not geodesic) setting. If used in a geodesic setting, the most important consideration to make is the computation of intersection points (which is practice is only an isseu of the line segments are relatively long). Further we also note that winding numbers for area's larger than half of the globe are sometimes treated specially. All other concepts of this algorithm (convex angles, direction, ...) can be ported to a geodesic setting without problems.
 
   Complexity:
   Currently, intersections are computed using a slow but robust implementation
@@ -77,21 +79,21 @@ module.exports = function(feature) {
 
   // Check input
   if (feature.type != "Feature") throw new Error("The input must a geojson object of type Feature");
-  if ((feature.geometry == undefined) || (feature.geometry == null)) throw new Error("The input must a geojson object with a non-empty geometry");
+  if ((feature.geometry === undefined) || (feature.geometry == null)) throw new Error("The input must a geojson object with a non-empty geometry");
   if (feature.geometry.type != "Polygon") throw new Error("The input must be a geojson Polygon");
 
   // Process input
-  var numInputRings = feature.geometry.coordinates.length;
-  var inputVertices = [];
-  for (var i = 0; i < numInputRings; i++) {
-    var inputRing = feature.geometry.coordinates[i];
-    if (!inputRing[0].equals(inputRing[inputRing.length-1])) {
-      inputRing.push(inputRing[0]) // Close input ring if it is not
+  var numRings = feature.geometry.coordinates.length;
+  var vertices = [];
+  for (var i = 0; i < numRings; i++) {
+    var ring = feature.geometry.coordinates[i];
+    if (!ring[0].equals(ring[ring.length-1])) {
+      ring.push(ring[0]) // Close input ring if it is not
     }
-    inputVertices.push.apply(inputVertices,inputRing.slice(0,inputRing.length-1));
+    vertices.push.apply(vertices,ring.slice(0,ring.length-1));
   }
-  if (!inputVertices.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
-  var numInputVertices = inputVertices.length; // number of input ring vertices, with the last closing vertices not counted
+  if (!vertices.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
+  var numvertices = vertices.length; // number of input ring vertices, with the last closing vertices not counted
 
   // Compute self-intersections
   var selfIsectsData = isects(feature, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
@@ -102,7 +104,7 @@ module.exports = function(feature) {
   // If no self-intersections are found, the input rings are the output rings. Hence, we must only compute their winding numbers, net winding numbers and (since ohers rings could lie outside the first ring) parents.
   if (numSelfIsect == 0) {
     var outputFeatureArray = [];
-    for(var i = 0; i < numInputRings; i++) {
+    for(var i = 0; i < numRings; i++) {
       outputFeatureArray.push(helpers.polygon([feature.geometry.coordinates[i]],{parent: -1, winding: windingOfRing(feature.geometry.coordinates[i])}));
     }
     var output = helpers.featureCollection(outputFeatureArray)
@@ -113,17 +115,17 @@ module.exports = function(feature) {
 
   // If self-intersections are found, we will compute the output rings with the help of two intermediate variables
   // First, we build the pseudo vertex list and intersection list
-  // The Pseudo vertex list is an array with for each ring an array with for each edge an array containing the pseudo-vertices (as made by their constructor) that have this ring and edge as ringAndEdgeIn, sorted for each edge by their fractional distance on this edge. It's length hence equals numInputRings.
+  // The Pseudo vertex list is an array with for each ring an array with for each edge an array containing the pseudo-vertices (as made by their constructor) that have this ring and edge as ringAndEdgeIn, sorted for each edge by their fractional distance on this edge. It's length hence equals numRings.
   var pseudoVtxListByRingAndEdge = [];
-  // The intersection list is an array containing intersections (as made by their constructor). First all numInputVertices ring-vertex-intersections, then all self-intersections (intra- and inter-ring). The order of the latter is not important but is permanent once given.
+  // The intersection list is an array containing intersections (as made by their constructor). First all numvertices ring-vertex-intersections, then all self-intersections (intra- and inter-ring). The order of the latter is not important but is permanent once given.
   var isectList = [];
   // Adding ring-pseudo-vertices to pseudoVtxListByRingAndEdge and ring-vertex-intersections to isectList
-  for (var i = 0; i < numInputRings; i++) {
+  for (var i = 0; i < numRings; i++) {
     pseudoVtxListByRingAndEdge.push([]);
     for (var j = 0; j < feature.geometry.coordinates[i].length-1; j++) {
       // Each edge will feature one ring-pseudo-vertex in its array, on the last position. i.e. edge j features the ring-pseudo-vertex of the ring vertex j+1, which has ringAndEdgeIn = [i,j], on the last position.
     	pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).mod(feature.geometry.coordinates[i].length-1)], 1, [i, j], [i, (j+1).mod(feature.geometry.coordinates[i].length-1)], undefined)]);
-      // The first numInputVertices elements in isectList correspond to the ring-vertex-intersections
+      // The first numvertices elements in isectList correspond to the ring-vertex-intersections
       isectList.push(new Isect(feature.geometry.coordinates[i][j], [i, (j-1).mod(feature.geometry.coordinates[i].length-1)], [i, j], undefined, undefined, false, true));
     }
   }
@@ -176,7 +178,7 @@ module.exports = function(feature) {
     }
   }
   // For self-intersections, we find the corresponding pseudo-vertex by looping through pseudoVtxListByRingAndEdge (3 loops) and comparing coordinates. The next-intersection property we copy depends on how the edges are labeled in the pseudo-vertex
-  for (var i = numInputVertices; i < numIsect; i++) {
+  for (var i = numvertices; i < numIsect; i++) {
     var foundEgde1In = foundEgde2In = false;
     for (var j = 0; (j < pseudoVtxListByRingAndEdge.length) && !(foundEgde1In && foundEgde2In); j++) {
       for (var k = 0; (k < pseudoVtxListByRingAndEdge[j].length) && !(foundEgde1In && foundEgde2In); k++) {
@@ -202,7 +204,7 @@ module.exports = function(feature) {
   var queue = []
   // For each output ring, add the ring-vertex-intersection with the smalles x-value (i.e. the left-most) as a start intersection. By choosing such an extremal intersections, we are sure to start at an intersection that is a convex vertex of its output ring. By adding them all to the queue, we are sure that no rings will be forgotten. If due to ring-intersections such an intersection will be encountered while walking, it will be removed from the queue.
   var i = 0;
-  for (var j = 0; j < numInputRings; j++) {
+  for (var j = 0; j < numRings; j++) {
     var leftIsect = i;
     for (var k = 0; k < feature.geometry.coordinates[j].length-1; k++) {
       if (isectList[i].coord[0] < isectList[leftIsect].coord[0]) {
@@ -241,7 +243,7 @@ module.exports = function(feature) {
     var currentOutputRing = outputFeatureArray.length;
     var currentOutputRingCoords = [isectList[startIsect].coord];
     if (debug) console.log("# Starting output ring number "+outputFeatureArray.length+" with winding "+currentOutputRingWinding+" from intersection "+startIsect);
-    if (debug) if (startIsect < numInputVertices) console.log("This is a ring-vertex-intersections, which means this output ring does not touch existing output rings");
+    if (debug) if (startIsect < numvertices) console.log("This is a ring-vertex-intersections, which means this output ring does not touch existing output rings");
     // Set up the variables used while walking over intersections: 'currentIsect', 'nxtIsect' and 'walkingRingAndEdge'
     var currentIsect = startIsect;
     if (isectList[startIsect].ringAndEdge1Walkable) {
@@ -321,7 +323,7 @@ module.exports = function(feature) {
   function determineParents() {
     var featuresWithoutParent = [];
     for (var i = 0; i < output.features.length; i++) {
-      console.log("Output ring "+i+" has parent "+output.features[i].properties.parent);
+      if (debug) console.log("Output ring "+i+" has parent "+output.features[i].properties.parent);
       if (output.features[i].properties.parent == -1) featuresWithoutParent.push(i);
     }
     if (debug) console.log("The following output ring(s) have no parent: "+featuresWithoutParent);
@@ -347,8 +349,6 @@ module.exports = function(feature) {
   function setNetWinding() {
     for (var i = 0; i < output.features.length; i++) {
       if (output.features[i].properties.parent == -1) {
-        // TODO: remove this check
-        if (debug) if (windingOfRing(output.features[i].geometry.coordinates[0]) != output.features[i].properties.winding) console.log("ERROR: previously computed winding was wrong");
         var netWinding = output.features[i].properties.winding
         output.features[i].properties.netWinding = netWinding;
         setNetWindingOfChildren(i,netWinding)
@@ -419,8 +419,7 @@ function windingOfRing(ring){
 
 // Function to compare Arrays of numbers. From http://stackoverflow.com/questions/7837456/how-to-compare-arrays-in-javascript
 // Warn if overriding existing method
-if(Array.prototype.equals)
-    console.warn("Overriding existing Array.prototype.equals. Possible causes: New API defines the method, there's a framework conflict or you've got double inclusions in your code.");
+// if(Array.prototype.equals) console.warn("Overriding existing Array.prototype.equals. Possible causes: New API defines the method, there's a framework conflict or you've got double inclusions in your code.");
 // attach the .equals method to Array's prototype to call it on any array
 Array.prototype.equals = function (array) {
     // if the other array is a falsy value, return
