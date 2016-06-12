@@ -39,9 +39,9 @@ In this example, the output will be a FeatureCollection of two polygons, one wit
 
 This algorithm employs the notion of intersections and pseudo-vertices as outlined in the article.
 
-*Intersections* are either vertices of an input ring (*ring-vertex-intersection*) or a self- or cross-intersection of those ring(s) (*self-intersection*).
+**Intersections** are either vertices of an input ring (*ring-vertex-intersection*) or a self- or cross-intersection of those ring(s) (*self-intersection*).
 
-*Pseudo-vertices* are a concepts that occur at an intersection: when two edges cross, one pseudo-vertex is formed by the first edge going up to and until the intersection vertex and the second edge going out from the intersection. A second pseudo vertex is formed reciprocally. Two such *intersection-pseudo-vertices* are depicted below.
+**Pseudo-vertices** are a concepts that occur at an intersection: when two edges cross, one pseudo-vertex is formed by the first edge going up to and until the intersection vertex and the second edge going out from the intersection. A second pseudo vertex is formed reciprocally. Two such *intersection-pseudo-vertices* are depicted below.
 ![](./intersectionPseudoVertices.png?raw=true width="80")  
 
 Also, at each input ring vertices one pseudo-vertex (*ring-pseudo-vertex*) is created by one egde going in and the other going out.
@@ -78,19 +78,11 @@ Additionally `k` is bounded by `O(n^2)`
 
 ### Differences with the original article
 
-This code differs from the algorithms and nomenclature of the article it is inspired on in the following way:
+This code differs from the algorithm and nomenclature of the article it is inspired on in the following way:
 
 - The code was written based on the article text, and not ported directly from the enclosed C/C++ code
 - This implementation expanded the algorithm to polygons containing inner and outer rings
 - No constructors are used, except `PseudoVtx` and `Isect`
-- `edges` is called `LineSegments` in the article
-- `ringAndEdgeOut` is called `l` in the article
-- `PseudoVtx` is called `nVtx`
-- `Isect` is called `intersection`
-- `nxtIsectAlongEdgeIn` is called `index`
-- `ringAndEdge1` and `ringAndEdge2` are named `origin1` and `origin2`
-- `winding` is not implemented as a property of an intersection, but as its own queue
-- `pseudoVtxListByRingAndEdge` is called `polygonEdgeArray`
+- Some variables are named differently: `edges` is called `LineSegments` in the article, `ringAndEdgeOut` is  `l`, `PseudoVtx` is `nVtx`, `Isect` is `intersection`, `nxtIsectAlongEdgeIn` is `index`, `ringAndEdge1` and `ringAndEdge2` are `origin1` and `origin2`, `pseudoVtxListByRingAndEdge` is `polygonEdgeArray`, `isectList` is `intersectionList` and `isectQueue` is `intersectioQueue`
 - `pseudoVtxListByRingAndEdge` contains the ring vertex at its end as the last item, and not the ring vertex at its start as the first item
-- `isectList` is called `intersectionList`
-- `isectQueue` is called `intersectioQueue`
+- `winding` is not implemented as a property of an intersection, but as its own queue
