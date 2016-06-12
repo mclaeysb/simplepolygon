@@ -1,4 +1,4 @@
-var isects = require('../geojson-polygon-self-intersections');
+var isects = require('geojson-polygon-self-intersections');
 var helpers = require('turf-helpers');
 var within = require('turf-within');
 var area = require('turf-area');
@@ -7,13 +7,12 @@ var area = require('turf-area');
 * Takes a complex (i.e. self-intersecting) geojson polygon, and breaks it down into its composite simple, non-self-intersecting one-ring polygons.
 *
 * @module simplepolygon
-* @param {Feature} feature input polygon. This feature may be unconform the {@link http://geojson.org/geojson-spec.html|geojson specs} in the sense that it's inner and outer rings may cross-intersect or self-intersect, that the outer ring must not contain the optional inner rings and that the winding number must not be positive for the outer and negative for the inner rings.
+* @param {Feature} feature Input polygon. This polygon may be unconform the {@link https://en.wikipedia.org/wiki/Simple_Features|Simple Features standard} in the sense that it's inner and outer rings may cross-intersect or self-intersect, that the outer ring must not contain the optional inner rings and that the winding number must not be positive for the outer and negative for the inner rings.
 * @return {FeatureCollection} Feature collection containing the simple, non-self-intersecting one-ring polygon features that the complex polygon is composed of. These simple polygons have properties such as their parent polygon, winding number and net winding number.
 *
 * @example
 * var poly = {
 *   "type": "Feature",
-*   "properties": {},
 *   "geometry": {
 *     "type": "Polygon",
 *     "coordinates": [[[0,0],[2,0],[0,2],[2,2],[0,0]]]
@@ -24,53 +23,6 @@ var area = require('turf-area');
 *
 * // =result
 * // which will be a featureCollection of two polygons, one with coordinates [[[0,0],[2,0],[1,1],[0,0]]], parent -1, winding 1 and net winding 1, and one with coordinates [[[1,1],[0,2],[2,2],[1,1]]], parent -1, winding -1 and net winding -1
-*/
-
-/*
-  This algorithm walks from intersections (i.e. a vertex of an input ring or a self- or cross-intersection of those ring(s)) to intersection over (rings and) edges in their original direction, and while walking traces simple, non-self-intersecting one-ring polygons by storing the vertices along the way. This is possible since each intersection knows which is the next one given the incomming walking edge. When walking, the algorithm also stores where it has walked (since we must only walk over each (part of an) edge once), and keeps track of intersections that are new and from where another walk (and hence simple polygon) could be initiated. The resulting simple, one-ring polygons cover all input edges exactly once and don't self- or cross-intersect (but can touch at intersections). Hence, they form a set of nested rings.
-
-  Some notes on the algorithm:
-  - We will talk about rings (arrays of [x,y]) and polygons (array of rings). The geojson spec requires rings to be non-self- and non-cross-intersecting, but here the intput rings can self- and cross-intersect (inter and intra ring). The output rings can't, since they are conform the spec. Therefore will talk about 'input rings' or simply 'rings' (non-conform), 'output rings' (conform) and more generally 'simple, non-self or cross-intersecting rings' (conform)
-  - We say that a polygon self-intersects when it's rings either self-intersect of cross-intersect
-  - Edges are oriented from their first to their second ring vertrex. Hence, ring i edge j goes from vertex j to j+1. This direction or orientation of an egde is kept unchanged during the algorithm. We will only walk along this direction
-  - This algorithm employs the notion of 'pseudo-vertices' and 'intersections' as outlined in the article
-  - We use the terms 'ring edge', 'ring vertex', 'self-intersection vertex', 'intersection' (which includes ring-vertex-intersection and self-intersection) and 'pseudo-vertex' (which includes 'ring-pseudo-vertex' and 'intersection-pseudo-vertex')
-  - At an intersection of two edges, two pseudo-vertices (intersection-pseudo-vertices) are one intersection (self-intersection) is present
-  - At a ring vertex, one pseudo-vertex (ring-pseudo-vertex) and one intersection (ring-intersection) is present
-  - A pseudo-vertex has an incomming and outgoing (crossing) edge
-  - The following objects are stored and passed by the index in the list between brackets: intersections (isectList) and pseudo-vertices (pseudoVtxListByRingAndEdge)
-  - The algorithm checks of the input has no non-unique vertices. This is mainly to prevent self-intersecting input polygons such as [[0,0],[2,0],[1,1],[0,2],[1,3],[2,2],[1,1],[0,0]], whose self-intersections would not be detected. As such, many polygons which are non-simple, by the OGC definition, for other reasons then self-intersection, will not be allowed. An exception includes polygons with spikes or cuts such as [[0,0],[2,0],[1,1],[2,2],[0,2],[1,1],[0,0]], who are currently allowed and treated correctly, but make the output non-simple (by OGC definition). This could be prevented by checking for vertices on other edges.
-  - The resulting component polygons are one-ring and simple (in the sense that their ring does not contain self-intersections) and two component simple polygons are either disjoint, touching in one or multiple vertices, or one fully encloses the other
-  - This algorithm takes geojson as input, be was developped for a euclidean (and not geodesic) setting. If used in a geodesic setting, the most important consideration to make is the computation of intersection points (which is practice is only an isseu of the line segments are relatively long). Further we also note that winding numbers for area's larger than half of the globe are sometimes treated specially. All other concepts of this algorithm (convex angles, direction, ...) can be ported to a geodesic setting without problems.
-
-  Complexity:
-  Currently, intersections are computed using a slow but robust implementation
-	For n line-segments and k self-intersections, this is O(n^2)
-  This is one of the most expensive parts of the algorithm
-  It can be optimised to O((n + k) log n) through Bentley–Ottmann algorithm (which is an improvement for small k (k < o(n2 / log n)))
-  See possibly https://github.com/e-cloud/sweepline
-  Also, this step could be optimised using a spatial index
-	The complexity of the simplepolygon-algorithm itself can be decomposed as follows:
-  It includes a sorting step for the (s = n+2*k) pseudo-vertices (O(s*log(s))),
-  And a lookup comparing (n+k) intersections and (n+2*k) pseudo-vertices, with worst-case complexity O((n+2*k)*(n+k))
-  This lookup could potentially be optimised using sorting or spatial index
-  Additionally k is bounded by O(n^2)
-
-  This code differs from the algorithms and nomenclature of the article it is insired on in the following way:
-  - The code was written based on the article, and not ported from the enclosed C/C++ code
-  - No constructors are used, except 'PseudoVtx' and 'Isect'
-  - This implementation expanded the algorithm to polygons containing inner and outer rings
-  - 'LineSegments' of the polygon (rings) are called 'edges' here, and are represented, when necessary, by the index of their first point
-  - 'ringAndEdgeOut' is called 'l' in the article
-  - 'PseudoVtx' is called 'nVtx'
-  - 'Isect' is called 'intersection'
-  - 'nxtIsectAlongEdgeIn' is called 'index'
-  - 'ringAndEdge1' and 'ringAndEdge2' are named 'origin1' and 'origin2'
-  - 'winding' is not implemented as a propoerty of an intersection, but as its own queue
-  - 'pseudoVtxListByRingAndEdge' is called 'polygonEdgeArray'
-  - 'pseudoVtxListByRingAndEdge' contains the ring vertex at its end as the last item, and not the ring vertex at its start as the first item
-  - 'isectList' is called 'intersectionList'
-  - 'isectQueue' is called 'intersectioQueue'
 */
 
 module.exports = function(feature) {

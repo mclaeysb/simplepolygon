@@ -25,6 +25,3 @@ build/Release
 node_modules
 
 .DS_Store
-
-README.md
-package.json
