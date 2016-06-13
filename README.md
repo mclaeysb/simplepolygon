@@ -33,7 +33,10 @@ The **input** feature is a GeoJSON polygon which may be non-conform the [Simple 
 
 The **output** is a FeatureCollection containing the simple, non-self-intersecting one-ring polygon features that the complex polygon is composed of. These simple polygons have properties such as their parent polygon, winding number and net winding number.
 
-In this example, the output will be a FeatureCollection of two polygons, one with coordinates `[[[0,0],[2,0],[1,1],[0,0]]]`, parent -1, winding 1 and net winding 1, and one with coordinates `[[[1,1],[0,2],[2,2],[1,1]]]`, parent -1, winding -1 and net winding -1
+In the above example, the output will be a FeatureCollection of two polygons, one with coordinates `[[[0,0],[2,0],[1,1],[0,0]]]`, parent -1, winding 1 and net winding 1, and one with coordinates `[[[1,1],[0,2],[2,2],[1,1]]]`, parent -1, winding -1 and net winding -1.
+
+Another example input and output is shown below.
+![](./example.png?raw=true width="100")  
 
 ## How the algorithm works
 
