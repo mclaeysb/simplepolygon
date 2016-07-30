@@ -39,7 +39,7 @@ module.exports = function(feature) {
   var vertices = [];
   for (var i = 0; i < numRings; i++) {
     var ring = feature.geometry.coordinates[i];
-    if (!ring[0].equals(ring[ring.length-1])) {
+    if (!equalArrays(ring[0],ring[ring.length-1])) {
       ring.push(ring[0]) // Close input ring if it is not
     }
     vertices.push.apply(vertices,ring.slice(0,ring.length-1));
@@ -76,9 +76,9 @@ module.exports = function(feature) {
     pseudoVtxListByRingAndEdge.push([]);
     for (var j = 0; j < feature.geometry.coordinates[i].length-1; j++) {
       // Each edge will feature one ring-pseudo-vertex in its array, on the last position. i.e. edge j features the ring-pseudo-vertex of the ring vertex j+1, which has ringAndEdgeIn = [i,j], on the last position.
-    	pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).mod(feature.geometry.coordinates[i].length-1)], 1, [i, j], [i, (j+1).mod(feature.geometry.coordinates[i].length-1)], undefined)]);
+    	pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)], 1, [i, j], [i, (j+1).modulo(feature.geometry.coordinates[i].length-1)], undefined)]);
       // The first numvertices elements in isectList correspond to the ring-vertex-intersections
-      isectList.push(new Isect(feature.geometry.coordinates[i][j], [i, (j-1).mod(feature.geometry.coordinates[i].length-1)], [i, j], undefined, undefined, false, true));
+      isectList.push(new Isect(feature.geometry.coordinates[i][j], [i, (j-1).modulo(feature.geometry.coordinates[i].length-1)], [i, j], undefined, undefined, false, true));
     }
   }
   // Adding intersection-pseudo-vertices to pseudoVtxListByRingAndEdge and self-intersections to isectList
@@ -105,12 +105,12 @@ module.exports = function(feature) {
         var foundNextIsect = false;
         for (var l = 0; (l < numIsect) && !foundNextIsect; l++) {
           if (k == pseudoVtxListByRingAndEdge[i][j].length-1) { // If it's the last pseudoVertex on that edge, then the next pseudoVertex is the first one on the next edge of that ring.
-            if (isectList[l].coord.equals(pseudoVtxListByRingAndEdge[i][(j+1).mod(feature.geometry.coordinates[i].length-1)][0].coord)) {
+            if (equalArrays(isectList[l].coord,pseudoVtxListByRingAndEdge[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)][0].coord)) {
               pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l; // For ring-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along ringAndEdgeOut. This is dealt with correctly in the next block.
               foundNextIsect = true;
             }
           } else {
-            if (isectList[l].coord.equals(pseudoVtxListByRingAndEdge[i][j][k+1].coord)) {
+            if (equalArrays(isectList[l].coord,pseudoVtxListByRingAndEdge[i][j][k+1].coord)) {
               pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l;
               foundNextIsect = true;
             }
@@ -125,7 +125,7 @@ module.exports = function(feature) {
   var i = 0;
   for (var j = 0; j < pseudoVtxListByRingAndEdge.length; j++) {
     for (var k = 0; k < pseudoVtxListByRingAndEdge[j].length; k++) {
-      isectList[i].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[j][(k-1).mod(pseudoVtxListByRingAndEdge[j].length)][pseudoVtxListByRingAndEdge[j][(k-1).mod(pseudoVtxListByRingAndEdge[j].length)].length-1].nxtIsectAlongEdgeIn;
+      isectList[i].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[j][(k-1).modulo(pseudoVtxListByRingAndEdge[j].length)][pseudoVtxListByRingAndEdge[j][(k-1).modulo(pseudoVtxListByRingAndEdge[j].length)].length-1].nxtIsectAlongEdgeIn;
       i++
     }
   }
@@ -135,8 +135,8 @@ module.exports = function(feature) {
     for (var j = 0; (j < pseudoVtxListByRingAndEdge.length) && !(foundEgde1In && foundEgde2In); j++) {
       for (var k = 0; (k < pseudoVtxListByRingAndEdge[j].length) && !(foundEgde1In && foundEgde2In); k++) {
         for (var l = 0; (l < pseudoVtxListByRingAndEdge[j][k].length) && !(foundEgde1In && foundEgde2In); l++) {
-          if (isectList[i].coord.equals(pseudoVtxListByRingAndEdge[j][k][l].coord)) { // This will happen twice
-            if (isectList[i].ringAndEdge1.equals(pseudoVtxListByRingAndEdge[j][k][l].ringAndEdgeIn)) {
+          if (equalArrays(isectList[i].coord,pseudoVtxListByRingAndEdge[j][k][l].coord)) { // This will happen twice
+            if (equalArrays(isectList[i].ringAndEdge1,pseudoVtxListByRingAndEdge[j][k][l].ringAndEdgeIn)) {
               isectList[i].nxtIsectAlongRingAndEdge1 = pseudoVtxListByRingAndEdge[j][k][l].nxtIsectAlongEdgeIn;
                foundEgde1In = true;
             } else {
@@ -206,7 +206,7 @@ module.exports = function(feature) {
       var nxtIsect = isectList[startIsect].nxtIsectAlongRingAndEdge2;
     }
     // While we have not arrived back at the same intersection, keep walking
-    while (!isectList[startIsect].coord.equals(isectList[nxtIsect].coord)){
+    while (!equalArrays(isectList[startIsect].coord,isectList[nxtIsect].coord)){
       if (debug) console.log("Walking from intersection "+currentIsect+" to "+nxtIsect+" over ring "+walkingRingAndEdge[0]+" and edge "+walkingRingAndEdge[1]);
       currentOutputRingCoords.push(isectList[nxtIsect].coord);
       if (debug) console.log("Adding intersection "+nxtIsect+" to current output ring");
@@ -222,7 +222,7 @@ module.exports = function(feature) {
       // If we have never walked away from this new intersection along the other ring and edge then we will soon do, add the intersection (and the parent wand winding number) to the queue
       // (We can predict the winding number and parent as follows: if the edge is convex, the other output ring started from there will have the alternate winding and lie outside of the current one, and thus have the same parent ring as the current ring. Otherwise, it will have the same winding number and lie inside of the current ring. We are, however, only sure of this of an output ring started from there does not enclose the current ring. This is why the initial queue's intersections must be sorted such that outer ones come out first.)
       // We then update the other two walking variables.
-      if (walkingRingAndEdge.equals(isectList[nxtIsect].ringAndEdge1)) {
+      if (equalArrays(walkingRingAndEdge,isectList[nxtIsect].ringAndEdge1)) {
         walkingRingAndEdge = isectList[nxtIsect].ringAndEdge2;
         isectList[nxtIsect].ringAndEdge2Walkable = false;
         if (isectList[nxtIsect].ringAndEdge1Walkable) {
@@ -361,7 +361,7 @@ function windingOfRing(ring){
   // Compute the winding number based on the vertex with the smallest x-value, it precessor and successor. An extremal vertex of a simple, non-self-intersecting ring is always convex, so the only reason it is not is because the winding number we use to compute it is wrong
   var leftVtx = 0;
   for (var i = 0; i < ring.length-1; i++) { if (ring[i][0] < ring[leftVtx][0]) leftVtx = i; }
-  if (isConvex([ring[(leftVtx-1).mod(ring.length-1)],ring[leftVtx],ring[(leftVtx+1).mod(ring.length-1)]],true)) {
+  if (isConvex([ring[(leftVtx-1).modulo(ring.length-1)],ring[leftVtx],ring[(leftVtx+1).modulo(ring.length-1)]],true)) {
     var winding = 1;
   } else {
     var winding = -1;
@@ -370,37 +370,32 @@ function windingOfRing(ring){
 }
 
 // Function to compare Arrays of numbers. From http://stackoverflow.com/questions/7837456/how-to-compare-arrays-in-javascript
-// Warn if overriding existing method
-// if(Array.prototype.equals) console.warn("Overriding existing Array.prototype.equals. Possible causes: New API defines the method, there's a framework conflict or you've got double inclusions in your code.");
-// attach the .equals method to Array's prototype to call it on any array
-Array.prototype.equals = function (array) {
+function equalArrays(array1, array2) {
     // if the other array is a falsy value, return
-    if (!array)
+    if (!array1 || !array2)
         return false;
 
     // compare lengths - can save a lot of time
-    if (this.length != array.length)
+    if (array1.length != array2.length)
         return false;
 
-    for (var i = 0, l=this.length; i < l; i++) {
+    for (var i = 0, l=array1.length; i < l; i++) {
         // Check if we have nested arrays
-        if (this[i] instanceof Array && array[i] instanceof Array) {
+        if (array1[i] instanceof Array && array2[i] instanceof Array) {
             // recurse into the nested arrays
-            if (!this[i].equals(array[i]))
+            if (!equalArrays(array1[i],array2[i]))
                 return false;
         }
-        else if (this[i] != array[i]) {
+        else if (array1[i] != array2[i]) {
             // Warning - two different object instances will never be equal: {x:20} != {x:20}
             return false;
         }
     }
     return true;
 }
-// Hide method from for-in loops
-Object.defineProperty(Array.prototype, "equals", {enumerable: false});
 
 // Fix Javascript modulo for negative number. From http://stackoverflow.com/questions/4467539/javascript-modulo-not-behaving
-Number.prototype.mod = function(n) {
+Number.prototype.modulo = function(n) {
     return ((this%n)+n)%n;
 }
 
