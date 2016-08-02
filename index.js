@@ -29,6 +29,9 @@ module.exports = function(feature) {
 
   var debug = false;
 
+  var timing = true;
+  var timestart = process.hrtime();
+
   // Check input
   if (feature.type != "Feature") throw new Error("The input must a geojson object of type Feature");
   if ((feature.geometry === undefined) || (feature.geometry == null)) throw new Error("The input must a geojson object with a non-empty geometry");
@@ -46,12 +49,14 @@ module.exports = function(feature) {
   }
   if (!vertices.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
   var numvertices = vertices.length; // number of input ring vertices, with the last closing vertices not counted
+  timelog("Processing input");
 
   // Compute self-intersections
   var selfIsectsData = isects(feature, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
     return [isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique];
   });
   var numSelfIsect = selfIsectsData.length;
+  timelog("Computing self-intersections");
 
   // If no self-intersections are found, the input rings are the output rings. Hence, we must only compute their winding numbers, net winding numbers and (since ohers rings could lie outside the first ring) parents.
   if (numSelfIsect == 0) {
@@ -62,6 +67,7 @@ module.exports = function(feature) {
     var output = helpers.featureCollection(outputFeatureArray)
     determineParents();
     setNetWinding();
+    timelog("Finishing without self-intersections");
     return output;
   }
 
@@ -95,6 +101,7 @@ module.exports = function(feature) {
       pseudoVtxListByRingAndEdge[i][j].sort(function(a, b){ return (a.param < b.param) ? -1 : 1 ; } );
     }
   }
+  timelog("Setting up pseudoVtxListByRingAndEdge and isectList");
 
   // Now we will to loop twice over pseudoVtxListByRingAndEdge and isectList in order to teach each intersection in isectList which is the next intersection along both it's [ring, edge]'s.
   // First, we find the next intersection for each pseudo-vertex in pseudoVtxListByRingAndEdge
@@ -119,6 +126,7 @@ module.exports = function(feature) {
       }
     }
   }
+  timelog("Filling pseudoVtxListByRingAndEdge");
 
   // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the (one or two) pseudo-vertices corresponding to each intersection and copying their next-intersection knowledge
   // For ring-vertex-intersections i of ring j and edge k, the corresponding pseudo-vertex is the last one in the previous (k-1) edge's list. We also correct the misnaming that happened in the previous block, since ringAndEdgeOut = ringAndEdge2 for ring vertices.
@@ -149,7 +157,7 @@ module.exports = function(feature) {
     }
   }
   // This explains why, eventhough when we will walk away from an intersection, we will walk way from the corresponding pseudo-vertex along edgeOut, pseudo-vertices have the property 'nxtIsectAlongEdgeIn' in stead of some propery 'nxtPseudoVtxAlongEdgeOut'. This is because this property (which is easy to find out) is used in the above for nxtIsectAlongRingAndEdge1 and nxtIsectAlongRingAndEdge2!
-
+  timelog("Filling isectList");
 
   // Before we start walking over the intersections to build the output rings, we prepare a queue that stores information on intersections we still have to deal with, and put at least one intersection in it.
   // This queue will contain information on intersections where we can start walking from once the current walk is finished, and its parent output ring (the smallest output ring it lies within, -1 if no parent or parent unknown yet) and its winding number (which we can already determine).
@@ -180,6 +188,7 @@ module.exports = function(feature) {
   // Srt the queue  by the same criterion used to find the leftIsect: the left-most leftIsect must be last in the queue, such that it will be popped first, such that we will work from out to in regarding input rings. This assumtion is used when predicting the winding number and parent of a new queue member.
   queue.sort(function(a, b){ return (isectList[a.isect].coord > isectList[b.isect].coord) ? -1 : 1 });
   if (debug) console.log("Initial state of the queue: "+JSON.stringify(queue));
+  timelog("Setting up queue");
 
   // Initialise output
   var outputFeatureArray = [];
@@ -267,9 +276,13 @@ module.exports = function(feature) {
   }
 
   var output = helpers.featureCollection(outputFeatureArray);
+  timelog("Walking");
 
   determineParents();
+  timelog("Determining parents");
+
   setNetWinding();
+  timelog("Setting winding number");
 
   // These functions are also used if no intersections are found
   function determineParents() {
@@ -321,6 +334,16 @@ module.exports = function(feature) {
   if (debug) console.log("# Total of "+output.features.length+" rings");
 
   return output;
+
+  // Function to log time passed since previous log
+  function timelog(msg){
+    // needs timestart and timing to be set
+    if (timing) {
+      console.log( (process.hrtime(timestart)[0] * 1000 + (process.hrtime(timestart)[1]/1000000)).toFixed(3) + " ms passed - " + msg); // print message + time
+      timestart = process.hrtime(); // reset the timer
+    }
+  }
+
 }
 
 
