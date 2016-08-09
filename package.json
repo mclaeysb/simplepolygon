@@ -1,6 +1,6 @@
 {
   "name": "simplepolygon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -26,7 +26,6 @@
     "turf-within": "^3.0.0",
     "turf-area": "^3.0.0"
   },
-  "devDependencies": {
-  },
+  "devDependencies": {},
   "homepage": "https://github.com/mclaeysb/simplepolygon#readme"
 }
