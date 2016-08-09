@@ -27,9 +27,9 @@ var area = require('turf-area');
 
 module.exports = function(feature) {
 
+  // Debug settings
   var debug = false;
-
-  var timing = true;
+  var timing = false;
   var timestart = process.hrtime();
 
   // Check input
@@ -67,6 +67,7 @@ module.exports = function(feature) {
     var output = helpers.featureCollection(outputFeatureArray)
     determineParents();
     setNetWinding();
+    if (debug) console.log("No self-intersections found. Input rings are output rings. Computed winding numbers, net winding numbers and parents");
     timelog("Finishing without self-intersections");
     return output;
   }
@@ -103,7 +104,7 @@ module.exports = function(feature) {
   }
   timelog("Setting up pseudoVtxListByRingAndEdge and isectList");
 
-  // Now we will to loop twice over pseudoVtxListByRingAndEdge and isectList in order to teach each intersection in isectList which is the next intersection along both it's [ring, edge]'s.
+  // Now we will loop twice over pseudoVtxListByRingAndEdge and isectList in order to teach each intersection in isectList which is the next intersection along both it's [ring, edge]'s.
   // First, we find the next intersection for each pseudo-vertex in pseudoVtxListByRingAndEdge
   // For each pseudovertex in pseudoVtxListByRingAndEdge (3 loops) look at the next pseudovertex on that edge and find the corresponding intersection by comparing coordinates
   for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++){
@@ -126,7 +127,7 @@ module.exports = function(feature) {
       }
     }
   }
-  timelog("Filling pseudoVtxListByRingAndEdge");
+  timelog("Computing nextIsect for pseudoVtxListByRingAndEdge");
 
   // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the (one or two) pseudo-vertices corresponding to each intersection and copying their next-intersection knowledge
   // For ring-vertex-intersections i of ring j and edge k, the corresponding pseudo-vertex is the last one in the previous (k-1) edge's list. We also correct the misnaming that happened in the previous block, since ringAndEdgeOut = ringAndEdge2 for ring vertices.
@@ -157,7 +158,7 @@ module.exports = function(feature) {
     }
   }
   // This explains why, eventhough when we will walk away from an intersection, we will walk way from the corresponding pseudo-vertex along edgeOut, pseudo-vertices have the property 'nxtIsectAlongEdgeIn' in stead of some propery 'nxtPseudoVtxAlongEdgeOut'. This is because this property (which is easy to find out) is used in the above for nxtIsectAlongRingAndEdge1 and nxtIsectAlongRingAndEdge2!
-  timelog("Filling isectList");
+  timelog("Porting nextIsect to isectList");
 
   // Before we start walking over the intersections to build the output rings, we prepare a queue that stores information on intersections we still have to deal with, and put at least one intersection in it.
   // This queue will contain information on intersections where we can start walking from once the current walk is finished, and its parent output ring (the smallest output ring it lies within, -1 if no parent or parent unknown yet) and its winding number (which we can already determine).
@@ -185,7 +186,7 @@ module.exports = function(feature) {
 
     queue.push({isect: leftIsect, parent: -1, winding: windingAtIsect})
   }
-  // Srt the queue  by the same criterion used to find the leftIsect: the left-most leftIsect must be last in the queue, such that it will be popped first, such that we will work from out to in regarding input rings. This assumtion is used when predicting the winding number and parent of a new queue member.
+  // Sort the queue by the same criterion used to find the leftIsect: the left-most leftIsect must be last in the queue, such that it will be popped first, such that we will work from out to in regarding input rings. This assumtion is used when predicting the winding number and parent of a new queue member.
   queue.sort(function(a, b){ return (isectList[a.isect].coord > isectList[b.isect].coord) ? -1 : 1 });
   if (debug) console.log("Initial state of the queue: "+JSON.stringify(queue));
   timelog("Setting up queue");
@@ -357,7 +358,7 @@ var PseudoVtx = function (coord, param, ringAndEdgeIn, ringAndEdgeOut, nxtIsectA
   this.nxtIsectAlongEdgeIn = nxtIsectAlongEdgeIn; // The next intersection when following the incomming edge (so not when following ringAndEdgeOut!)
 }
 
-// Constructor for a intersection. There are two intersection-pseudo-vertices per self-intersection and one ring-pseudo-vertex per ring-vertex-intersection. Their labels 1 and 2 are not assigned a particular meaning but are permanent once given.
+// Constructor for an intersection. There are two intersection-pseudo-vertices per self-intersection and one ring-pseudo-vertex per ring-vertex-intersection. Their labels 1 and 2 are not assigned a particular meaning but are permanent once given.
 var Isect = function (coord, ringAndEdge1, ringAndEdge2, nxtIsectAlongRingAndEdge1, nxtIsectAlongRingAndEdge2, ringAndEdge1Walkable, ringAndEdge2Walkable) {
   this.coord = coord; // [x,y] of this intersection
   this.ringAndEdge1 = ringAndEdge1; // first edge of this intersection
