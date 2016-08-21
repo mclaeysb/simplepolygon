@@ -2,6 +2,7 @@ var isects = require('geojson-polygon-self-intersections');
 var helpers = require('turf-helpers');
 var within = require('turf-within');
 var area = require('turf-area');
+var rbush = require('rbush');
 
 /**
 * Takes a complex (i.e. self-intersecting) geojson polygon, and breaks it down into its composite simple, non-self-intersecting one-ring polygons.
@@ -104,54 +105,47 @@ module.exports = function(feature) {
   }
   timelog("Setting up pseudoVtxListByRingAndEdge and isectList");
 
-  // Now we will loop twice over pseudoVtxListByRingAndEdge and isectList in order to teach each intersection in isectList which is the next intersection along both it's [ring, edge]'s.
-  // First, we find the next intersection for each pseudo-vertex in pseudoVtxListByRingAndEdge
+  // Make a spatial index of intersections, in preperation for the following two steps
+  allIsectsAsIsectRbushTreeItem = [];
+  for (var i = 0; i < numIsect; i++) {
+    allIsectsAsIsectRbushTreeItem.push({minX: isectList[i].coord[0], minY: isectList[i].coord[1], maxX: isectList[i].coord[0], maxY: isectList[i].coord[1], index: i}); // could pass isect: isectList[i], but not necessary
+  }
+  var isectRbushTree = rbush();
+  isectRbushTree.load(allIsectsAsIsectRbushTreeItem);
+
+  // Now we will teach each intersection in isectList which is the next intersection along both it's [ring, edge]'s, in two steps.
+  // First, we find the next intersection for each pseudo-vertex in pseudoVtxListByRingAndEdge:
   // For each pseudovertex in pseudoVtxListByRingAndEdge (3 loops) look at the next pseudovertex on that edge and find the corresponding intersection by comparing coordinates
   for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++){
     for (var j = 0; j < pseudoVtxListByRingAndEdge[i].length; j++){
       for (var k = 0; k < pseudoVtxListByRingAndEdge[i][j].length; k++){
-        var foundNextIsect = false;
-        for (var l = 0; (l < numIsect) && !foundNextIsect; l++) {
-          if (k == pseudoVtxListByRingAndEdge[i][j].length-1) { // If it's the last pseudoVertex on that edge, then the next pseudoVertex is the first one on the next edge of that ring.
-            if (equalArrays(isectList[l].coord,pseudoVtxListByRingAndEdge[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)][0].coord)) {
-              pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l; // For ring-pseudo-vertices, this is wrongly called nxtIsectAlongEdgeIn, as it is actually the next one along ringAndEdgeOut. This is dealt with correctly in the next block.
-              foundNextIsect = true;
-            }
-          } else {
-            if (equalArrays(isectList[l].coord,pseudoVtxListByRingAndEdge[i][j][k+1].coord)) {
-              pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = l;
-              foundNextIsect = true;
-            }
-          }
+        var coordToFind;
+        if (k == pseudoVtxListByRingAndEdge[i][j].length-1) { // If it's the last pseudoVertex on that edge, then the next pseudoVertex is the first one on the next edge of that ring.
+          coordToFind = pseudoVtxListByRingAndEdge[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)][0].coord;
+        } else {
+          coordToFind = pseudoVtxListByRingAndEdge[i][j][k+1].coord;
         }
+        var IsectRbushTreeItemFound = isectRbushTree.search({minX: coordToFind[0], minY: coordToFind[1], maxX: coordToFind[0], maxY: coordToFind[1]})[0]; // We can take [0] of the result, because there is only one isect correponding to a pseudo-vertex
+        pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn = IsectRbushTreeItemFound.index;
       }
     }
   }
   timelog("Computing nextIsect for pseudoVtxListByRingAndEdge");
 
-  // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the (one or two) pseudo-vertices corresponding to each intersection and copying their next-intersection knowledge
-  // For ring-vertex-intersections i of ring j and edge k, the corresponding pseudo-vertex is the last one in the previous (k-1) edge's list. We also correct the misnaming that happened in the previous block, since ringAndEdgeOut = ringAndEdge2 for ring vertices.
-  var i = 0;
-  for (var j = 0; j < pseudoVtxListByRingAndEdge.length; j++) {
-    for (var k = 0; k < pseudoVtxListByRingAndEdge[j].length; k++) {
-      isectList[i].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[j][(k-1).modulo(pseudoVtxListByRingAndEdge[j].length)][pseudoVtxListByRingAndEdge[j][(k-1).modulo(pseudoVtxListByRingAndEdge[j].length)].length-1].nxtIsectAlongEdgeIn;
-      i++
-    }
-  }
-  // For self-intersections, we find the corresponding pseudo-vertex by looping through pseudoVtxListByRingAndEdge (3 loops) and comparing coordinates. The next-intersection property we copy depends on how the edges are labeled in the pseudo-vertex
-  for (var i = numvertices; i < numIsect; i++) {
-    var foundEgde1In = foundEgde2In = false;
-    for (var j = 0; (j < pseudoVtxListByRingAndEdge.length) && !(foundEgde1In && foundEgde2In); j++) {
-      for (var k = 0; (k < pseudoVtxListByRingAndEdge[j].length) && !(foundEgde1In && foundEgde2In); k++) {
-        for (var l = 0; (l < pseudoVtxListByRingAndEdge[j][k].length) && !(foundEgde1In && foundEgde2In); l++) {
-          if (equalArrays(isectList[i].coord,pseudoVtxListByRingAndEdge[j][k][l].coord)) { // This will happen twice
-            if (equalArrays(isectList[i].ringAndEdge1,pseudoVtxListByRingAndEdge[j][k][l].ringAndEdgeIn)) {
-              isectList[i].nxtIsectAlongRingAndEdge1 = pseudoVtxListByRingAndEdge[j][k][l].nxtIsectAlongEdgeIn;
-               foundEgde1In = true;
-            } else {
-              isectList[i].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[j][k][l].nxtIsectAlongEdgeIn;
-              foundEgde2In = true;
-            }
+  // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the intersection corresponding to each pseudo-vertex and copying the pseudo-vertex' knownledge of the next-intersection over to the intersection
+  for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++){
+    for (var j = 0; j < pseudoVtxListByRingAndEdge[i].length; j++){
+      for (var k = 0; k < pseudoVtxListByRingAndEdge[i][j].length; k++){
+        var coordToFind = pseudoVtxListByRingAndEdge[i][j][k].coord;
+        var IsectRbushTreeItemFound = isectRbushTree.search({minX: coordToFind[0], minY: coordToFind[1], maxX: coordToFind[0], maxY: coordToFind[1]})[0]; // We can take [0] of the result, because there is only one isect correponding to a pseudo-vertex
+        var l = IsectRbushTreeItemFound.index;
+        if (l < numvertices) { // Special treatment at ring-vertices: we correct the misnaming that happened in the previous block, since ringAndEdgeOut = ringAndEdge2 for ring vertices.
+            isectList[l].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn;
+        } else { // Port the knowledge of the next intersection from the pseudo-vertices to the intersections, depending on how the edges are labeled in the pseudo-vertex and intersection.
+          if (equalArrays(isectList[l].ringAndEdge1, pseudoVtxListByRingAndEdge[i][j][k].ringAndEdgeIn)) {
+            isectList[l].nxtIsectAlongRingAndEdge1 = pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn;
+          } else {
+            isectList[l].nxtIsectAlongRingAndEdge2 = pseudoVtxListByRingAndEdge[i][j][k].nxtIsectAlongEdgeIn;
           }
         }
       }
