@@ -64,20 +64,7 @@ This algorithm walks from intersections to intersection over (rings and) edges i
 - The algorithm checks if the input has no non-unique vertices. This is mainly to prevent self-intersecting input polygons such as `[[0,0],[2,0],[1,1],[0,2],[1,3],[2,2],[1,1],[0,0]]`, whose self-intersections would not be detected. As such, many polygons which are non-simple, by the OGC definition, for other reasons then self-intersection, will not be allowed. An exception includes polygons with spikes or cuts such as `[[0,0],[2,0],[1,1],[2,2],[0,2],[1,1],[0,0]]`, who are currently allowed and treated correctly, but make the output non-simple (by OGC definition). This could be prevented by checking for vertices on other edges.
 - The resulting component polygons are one-ring and simple (in the sense that their ring does not contain self-intersections) and two component simple polygons are either disjoint, touching in one or multiple vertices, or one fully encloses the other
 - This algorithm takes GeoJSON as input, be was developed for a euclidean (and not geodesic) setting. If used in a geodesic setting, the most important consideration to make is the computation of intersection points (which is practice is only an issue of the line segments are relatively long). Further we also note that winding numbers for area's larger than half of the globe are sometimes treated specially. All other concepts of this algorithm (convex angles, direction, ...) can be ported to a geodesic setting without problems.
-
-### Complexity
-
-Currently, intersections are computed using a slow but robust implementation
-For `n` line-segments and `k` self-intersections, this is `O(n^2)`
-This is one of the most expensive parts of the algorithm
-It can be optimised to `O((n + k) log n)` through Bentley–Ottmann algorithm (which is an improvement for small `k` (`k < o(n2 / log n))`)
-See possibly [sweepline in GitHub](https://github.com/e-cloud/sweepline)
-Also, this step could be optimised using a spatial index
-The complexity of the simplepolygon-algorithm itself can be decomposed as follows:
-It includes a sorting step for the `s = n+2*k` pseudo-vertices (`O(s*log(s))`),
-and a lookup comparing `n+k` intersections and `n+2*k` pseudo-vertices, with worst-case complexity `O((n+2k)(n+k))`
-This lookup could potentially be optimised using sorting or spatial index
-Additionally `k` is bounded by `O(n^2)`
+- Since v1.1.1, spatial indexes are used in the underlying computation of edge intersections and throughout the algorithm, to dramatically speed up the computations in case of large polygons
 
 ### Differences with the original article
 

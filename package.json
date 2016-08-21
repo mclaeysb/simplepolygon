@@ -21,7 +21,7 @@
     "url": "https://github.com/mclaeysb/simplepolygon/issues"
   },
   "dependencies": {
-    "geojson-polygon-self-intersections": "^1.0.0",
+    "geojson-polygon-self-intersections": "^1.1.1",
     "rbush": "^2.0.1",
     "turf-area": "^3.0.0",
     "turf-helpers": "^3.0.0",
