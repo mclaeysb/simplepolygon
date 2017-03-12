@@ -1,7 +1,7 @@
 var isects = require('geojson-polygon-self-intersections');
-var helpers = require('turf-helpers');
-var within = require('turf-within');
-var area = require('turf-area');
+var helpers = require('@turf/helpers');
+var within = require('@turf/within');
+var area = require('@turf/area');
 var rbush = require('rbush');
 
 /**
@@ -84,7 +84,7 @@ module.exports = function(feature) {
     pseudoVtxListByRingAndEdge.push([]);
     for (var j = 0; j < feature.geometry.coordinates[i].length-1; j++) {
       // Each edge will feature one ring-pseudo-vertex in its array, on the last position. i.e. edge j features the ring-pseudo-vertex of the ring vertex j+1, which has ringAndEdgeIn = [i,j], on the last position.
-    	pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)], 1, [i, j], [i, (j+1).modulo(feature.geometry.coordinates[i].length-1)], undefined)]);
+      pseudoVtxListByRingAndEdge[i].push([new PseudoVtx(feature.geometry.coordinates[i][(j+1).modulo(feature.geometry.coordinates[i].length-1)], 1, [i, j], [i, (j+1).modulo(feature.geometry.coordinates[i].length-1)], undefined)]);
       // The first numvertices elements in isectList correspond to the ring-vertex-intersections
       isectList.push(new Isect(feature.geometry.coordinates[i][j], [i, (j-1).modulo(feature.geometry.coordinates[i].length-1)], [i, j], undefined, undefined, false, true));
     }
