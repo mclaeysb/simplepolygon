@@ -48,7 +48,7 @@ module.exports = function(feature) {
     }
     vertices.push.apply(vertices,ring.slice(0,ring.length-1));
   }
-  if (!vertices.isUnique()) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
+  if (!isUnique(vertices)) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
   var numvertices = vertices.length; // number of input ring vertices, with the last closing vertices not counted
   timelog("Processing input");
 
@@ -418,28 +418,28 @@ Number.prototype.modulo = function(n) {
 }
 
 // Function to get array with only unique elements. From http://stackoverflow.com/questions/1960473/unique-values-in-an-array
-Array.prototype.getUnique = function(){
+function getUnique(array) {
  var u = {}, a = [];
- for(var i = 0, l = this.length; i < l; ++i){
-    if(u.hasOwnProperty(this[i])) {
+ for(var i = 0, l = array.length; i < l; ++i){
+    if(u.hasOwnProperty(array[i])) {
        continue;
     }
-    a.push(this[i]);
-    u[this[i]] = 1;
+    a.push(array[i]);
+    u[array[i]] = 1;
  }
  return a;
 }
 
 // Function to check if array is unique (i.e. all unique elements, i.e. no duplicate elements)
-Array.prototype.isUnique = function(){
+function isUnique(array) {
  var u = {}, a = [];
  var isUnique = 1;
- for(var i = 0, l = this.length; i < l; ++i){
-    if(u.hasOwnProperty(this[i])) {
+ for(var i = 0, l = array.length; i < l; ++i){
+    if(u.hasOwnProperty(array[i])) {
       isUnique = 0;
       break;
     }
-    u[this[i]] = 1;
+    u[array[i]] = 1;
  }
  return isUnique;
 }
