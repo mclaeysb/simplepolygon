@@ -26,12 +26,11 @@ var rbush = require('rbush');
 * // which will be a featureCollection of two polygons, one with coordinates [[[0,0],[2,0],[1,1],[0,0]]], parent -1, winding 1 and net winding 1, and one with coordinates [[[1,1],[0,2],[2,2],[1,1]]], parent -1, winding -1 and net winding -1
 */
 
-module.exports = function(feature) {
+module.exports = function(feature,timing) {
 
   // Debug settings
   var debug = false;
-  var timing = false;
-  var timestart = process.hrtime();
+  var timestart = timing && process.hrtime();
 
   // Check input
   if (feature.type != "Feature") throw new Error("The input must a geojson object of type Feature");
