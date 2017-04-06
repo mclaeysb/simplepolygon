@@ -3,6 +3,8 @@ var helpers = require('@turf/helpers');
 var within = require('@turf/within');
 var area = require('@turf/area');
 var rbush = require('rbush');
+var debug = require('debug')('simplepolygon');
+var debugAll = require('debug')('simplepolygon:all');
 
 /**
 * Takes a complex (i.e. self-intersecting) geojson polygon, and breaks it down into its composite simple, non-self-intersecting one-ring polygons.
@@ -27,12 +29,6 @@ var rbush = require('rbush');
 */
 
 module.exports = function(feature) {
-
-  // Debug settings
-  var debug = false;
-  var timing = false;
-  var timestart = process.hrtime();
-
   // Check input
   if (feature.type != "Feature") throw new Error("The input must a geojson object of type Feature");
   if ((feature.geometry === undefined) || (feature.geometry == null)) throw new Error("The input must a geojson object with a non-empty geometry");
@@ -50,14 +46,14 @@ module.exports = function(feature) {
   }
   if (!isUnique(vertices)) throw new Error("The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)");
   var numvertices = vertices.length; // number of input ring vertices, with the last closing vertices not counted
-  timelog("Processing input");
+  debug("Processing input");
 
   // Compute self-intersections
   var selfIsectsData = isects(feature, function filterFn(isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique){
     return [isect, ring0, edge0, start0, end0, frac0, ring1, edge1, start1, end1, frac1, unique];
   });
   var numSelfIsect = selfIsectsData.length;
-  timelog("Computing self-intersections");
+  debug("Computing self-intersections");
 
   // If no self-intersections are found, the input rings are the output rings. Hence, we must only compute their winding numbers, net winding numbers and (since ohers rings could lie outside the first ring) parents.
   if (numSelfIsect == 0) {
@@ -68,8 +64,8 @@ module.exports = function(feature) {
     var output = helpers.featureCollection(outputFeatureArray)
     determineParents();
     setNetWinding();
-    if (debug) console.log("No self-intersections found. Input rings are output rings. Computed winding numbers, net winding numbers and parents");
-    timelog("Finishing without self-intersections");
+    debugAll("No self-intersections found. Input rings are output rings. Computed winding numbers, net winding numbers and parents");
+    debug("Finishing without self-intersections");
     return output;
   }
 
@@ -103,7 +99,7 @@ module.exports = function(feature) {
       pseudoVtxListByRingAndEdge[i][j].sort(function(a, b){ return (a.param < b.param) ? -1 : 1 ; } );
     }
   }
-  timelog("Setting up pseudoVtxListByRingAndEdge and isectList");
+  debug("Setting up pseudoVtxListByRingAndEdge and isectList");
 
   // Make a spatial index of intersections, in preperation for the following two steps
   allIsectsAsIsectRbushTreeItem = [];
@@ -130,7 +126,7 @@ module.exports = function(feature) {
       }
     }
   }
-  timelog("Computing nextIsect for pseudoVtxListByRingAndEdge");
+  debug("Computing nextIsect for pseudoVtxListByRingAndEdge");
 
   // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the intersection corresponding to each pseudo-vertex and copying the pseudo-vertex' knownledge of the next-intersection over to the intersection
   for (var i = 0; i < pseudoVtxListByRingAndEdge.length; i++){
@@ -152,7 +148,7 @@ module.exports = function(feature) {
     }
   }
   // This explains why, eventhough when we will walk away from an intersection, we will walk way from the corresponding pseudo-vertex along edgeOut, pseudo-vertices have the property 'nxtIsectAlongEdgeIn' in stead of some propery 'nxtPseudoVtxAlongEdgeOut'. This is because this property (which is easy to find out) is used in the above for nxtIsectAlongRingAndEdge1 and nxtIsectAlongRingAndEdge2!
-  timelog("Porting nextIsect to isectList");
+  debug("Porting nextIsect to isectList");
 
   // Before we start walking over the intersections to build the output rings, we prepare a queue that stores information on intersections we still have to deal with, and put at least one intersection in it.
   // This queue will contain information on intersections where we can start walking from once the current walk is finished, and its parent output ring (the smallest output ring it lies within, -1 if no parent or parent unknown yet) and its winding number (which we can already determine).
@@ -182,8 +178,8 @@ module.exports = function(feature) {
   }
   // Sort the queue by the same criterion used to find the leftIsect: the left-most leftIsect must be last in the queue, such that it will be popped first, such that we will work from out to in regarding input rings. This assumtion is used when predicting the winding number and parent of a new queue member.
   queue.sort(function(a, b){ return (isectList[a.isect].coord > isectList[b.isect].coord) ? -1 : 1 });
-  if (debug) console.log("Initial state of the queue: "+JSON.stringify(queue));
-  timelog("Setting up queue");
+  debugAll("Initial state of the queue: " + JSON.stringify(queue));
+  debug("Setting up queue");
 
   // Initialise output
   var outputFeatureArray = [];
@@ -198,8 +194,8 @@ module.exports = function(feature) {
     // Make new output ring and add vertex from starting intersection
     var currentOutputRing = outputFeatureArray.length;
     var currentOutputRingCoords = [isectList[startIsect].coord];
-    if (debug) console.log("# Starting output ring number "+outputFeatureArray.length+" with winding "+currentOutputRingWinding+" from intersection "+startIsect);
-    if (debug) if (startIsect < numvertices) console.log("This is a ring-vertex-intersections, which means this output ring does not touch existing output rings");
+    debugAll("# Starting output ring number " + outputFeatureArray.length + " with winding " + currentOutputRingWinding + " from intersection " + startIsect);
+    if (startIsect < numvertices) debugAll("This is a ring-vertex-intersections, which means this output ring does not touch existing output rings");
     // Set up the variables used while walking over intersections: 'currentIsect', 'nxtIsect' and 'walkingRingAndEdge'
     var currentIsect = startIsect;
     if (isectList[startIsect].ringAndEdge1Walkable) {
@@ -211,14 +207,14 @@ module.exports = function(feature) {
     }
     // While we have not arrived back at the same intersection, keep walking
     while (!equalArrays(isectList[startIsect].coord,isectList[nxtIsect].coord)){
-      if (debug) console.log("Walking from intersection "+currentIsect+" to "+nxtIsect+" over ring "+walkingRingAndEdge[0]+" and edge "+walkingRingAndEdge[1]);
+      debugAll("Walking from intersection " + currentIsect + " to " + nxtIsect + " over ring " + walkingRingAndEdge[0] + " and edge " + walkingRingAndEdge[1]);
       currentOutputRingCoords.push(isectList[nxtIsect].coord);
-      if (debug) console.log("Adding intersection "+nxtIsect+" to current output ring");
+      debugAll("Adding intersection " + nxtIsect + " to current output ring");
       // If the next intersection is queued, we can remove it, because we will go there now.
       var nxtIsectInQueue = undefined;
       for(var i = 0; i < queue.length; i++) { if (queue[i].isect == nxtIsect) {nxtIsectInQueue = i; break; } }
       if (nxtIsectInQueue != undefined) {
-        if (debug) console.log("Removing intersection "+nxtIsect+" from queue");
+        debugAll("Removing intersection " + nxtIsect + " from queue");
         queue.splice(nxtIsectInQueue,1);
       }
       // Arriving at this new intersection, we know which will be our next walking ring and edge (if we came from 1 we will walk away from 2 and vice versa),
@@ -230,7 +226,7 @@ module.exports = function(feature) {
         walkingRingAndEdge = isectList[nxtIsect].ringAndEdge2;
         isectList[nxtIsect].ringAndEdge2Walkable = false;
         if (isectList[nxtIsect].ringAndEdge1Walkable) {
-          if (debug) console.log("Adding intersection "+nxtIsect+" to queue");
+          debugAll("Adding intersection " + nxtIsect + " to queue");
           var pushing = {isect: nxtIsect};
           if (isConvex([isectList[currentIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongRingAndEdge2].coord],currentOutputRingWinding == 1)) {
             pushing.parent = currentOutputRingParent;
@@ -247,7 +243,7 @@ module.exports = function(feature) {
         walkingRingAndEdge = isectList[nxtIsect].ringAndEdge1;
         isectList[nxtIsect].ringAndEdge1Walkable = false;
         if (isectList[nxtIsect].ringAndEdge2Walkable) {
-          if (debug) console.log("Adding intersection "+nxtIsect+" to queue");
+          debugAll("Adding intersection " + nxtIsect + " to queue");
           var pushing = {isect: nxtIsect};
           if (isConvex([isectList[currentIsect].coord, isectList[nxtIsect].coord, isectList[isectList[nxtIsect].nxtIsectAlongRingAndEdge1].coord],currentOutputRingWinding == 1)) {
             pushing.parent = currentOutputRingParent;
@@ -261,9 +257,9 @@ module.exports = function(feature) {
         currentIsect = nxtIsect;
         nxtIsect = isectList[nxtIsect].nxtIsectAlongRingAndEdge1;
       }
-      if (debug) console.log("Current state of the queue: "+JSON.stringify(queue));
+      debugAll("Current state of the queue: " + JSON.stringify(queue));
     }
-    if (debug) console.log("Walking from intersection "+currentIsect+" to "+nxtIsect+" over ring "+walkingRingAndEdge[0]+" and edge "+walkingRingAndEdge[1]+" and closing ring");
+    debugAll("Walking from intersection " + currentIsect + " to " + nxtIsect + " over ring " + walkingRingAndEdge[0] + " and edge " + walkingRingAndEdge[1] + " and closing ring");
     // Close output ring
     currentOutputRingCoords.push(isectList[nxtIsect].coord);
     // Push output ring to output
@@ -271,22 +267,22 @@ module.exports = function(feature) {
   }
 
   var output = helpers.featureCollection(outputFeatureArray);
-  timelog("Walking");
+  debug("Walking");
 
   determineParents();
-  timelog("Determining parents");
+  debug("Determining parents");
 
   setNetWinding();
-  timelog("Setting winding number");
+  debug("Setting winding number");
 
   // These functions are also used if no intersections are found
   function determineParents() {
     var featuresWithoutParent = [];
     for (var i = 0; i < output.features.length; i++) {
-      if (debug) console.log("Output ring "+i+" has parent "+output.features[i].properties.parent);
+      debugAll("Output ring " + i + " has parent " + output.features[i].properties.parent);
       if (output.features[i].properties.parent == -1) featuresWithoutParent.push(i);
     }
-    if (debug) console.log("The following output ring(s) have no parent: "+featuresWithoutParent);
+    debugAll("The following output ring(s) have no parent: " + featuresWithoutParent);
     if (featuresWithoutParent.length > 1) {
       for (var i = 0; i < featuresWithoutParent.length; i++) {
         var parent = -1;
@@ -296,12 +292,12 @@ module.exports = function(feature) {
           if (within(helpers.featureCollection([helpers.point(output.features[featuresWithoutParent[i]].geometry.coordinates[0][0])]),helpers.featureCollection([output.features[j]])).features.length == 1) {
             if (area(output.features[j]) < parentArea) {
               parent = j;
-              if (debug) console.log("Ring "+featuresWithoutParent[i]+" lies within output ring "+j);
+              debugAll("Ring "+featuresWithoutParent[i]+" lies within output ring "+j);
             }
           }
         }
         output.features[featuresWithoutParent[i]].properties.parent = parent;
-        if (debug) console.log("Ring "+featuresWithoutParent[i]+" is assigned parent "+parent);
+        debugAll("Ring "+featuresWithoutParent[i]+" is assigned parent "+parent);
       }
     }
   }
@@ -326,19 +322,9 @@ module.exports = function(feature) {
     }
   }
 
-  if (debug) console.log("# Total of "+output.features.length+" rings");
+  debugAll("# Total of " + output.features.length + " rings");
 
   return output;
-
-  // Function to log time passed since previous log
-  function timelog(msg){
-    // needs timestart and timing to be set
-    if (timing) {
-      console.log( (process.hrtime(timestart)[0] * 1000 + (process.hrtime(timestart)[1]/1000000)).toFixed(3) + " ms passed - " + msg); // print message + time
-      timestart = process.hrtime(); // reset the timer
-    }
-  }
-
 }
 
 
@@ -414,7 +400,7 @@ function equalArrays(array1, array2) {
 
 // Fix Javascript modulo for negative number. From http://stackoverflow.com/questions/4467539/javascript-modulo-not-behaving
 Number.prototype.modulo = function(n) {
-  return ((this%n)+n)%n;
+  return ((this % n) + n) % n;
 }
 
 // Function to get array with only unique elements. From http://stackoverflow.com/questions/1960473/unique-values-in-an-array
