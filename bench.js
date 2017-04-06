@@ -16,10 +16,9 @@ const fixtures = fs.readdirSync(directory).map(filename => {
 /**
  * Benchmark Results
  *
- * polygons x 3,567 ops/sec ±1.61% (85 runs sampled)
- * simple1 x 9,013 ops/sec ±1.15% (86 runs sampled)
- * simple2 x 10,278 ops/sec ±1.52% (86 runs sampled)
- * simple3 x 13,124 ops/sec ±1.37% (85 runs sampled)
+ * complex x 5,311 ops/sec ±12.57% (69 runs sampled)
+ * simple x 36,499 ops/sec ±1.75% (87 runs sampled)
+ * with-hole x 44,355 ops/sec ±1.93% (88 runs sampled)
  */
 const suite = new Benchmark.Suite('simplepolygon');
 for (const {name, geojson} of fixtures) {
