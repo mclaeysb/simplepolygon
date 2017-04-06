@@ -23,7 +23,6 @@ const fixtures = fs.readdirSync(directories.in).map(filename => {
 test('simplepolygon', t => {
     for (const {filename, name, geojson}  of fixtures) {
         const results = colorize(simplepolygon(geojson));
-        results.features.push(geojson)
 
         if (process.env.REGEN) write.sync(directories.out + filename, results);
         t.deepEquals(results, load.sync(directories.out + filename), name);
@@ -31,9 +30,10 @@ test('simplepolygon', t => {
     t.end();
 });
 
-function colorize(features, color = '#F00', width = 6) {
+function colorize(features, colors = ['#F00', '#00F'], width = 6) {
     const results = [];
-    featureEach(features, feature => {
+    featureEach(features, (feature, index) => {
+        const color = colors[index % colors.length]
         feature.properties = {
             stroke: color,
             fill: color,
