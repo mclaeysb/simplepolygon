@@ -36,7 +36,7 @@ The **output** is a FeatureCollection containing the simple, non-self-intersecti
 In the above example, the output will be a FeatureCollection of two polygons, one with coordinates `[[[0,0],[2,0],[1,1],[0,0]]]`, parent -1, winding 1 and net winding 1, and one with coordinates `[[[1,1],[0,2],[2,2],[1,1]]]`, parent -1, winding -1 and net winding -1.
 
 Another example input and output is shown below.
-![](./example.png?raw=true width="100")  
+![](/example.png?raw=true)  
 
 ## How the algorithm works
 
@@ -45,7 +45,7 @@ This algorithm employs the notion of intersections and pseudo-vertices as outlin
 **Intersections** are either vertices of an input ring (*ring-vertex-intersection*) or a self- or cross-intersection of those ring(s) (*self-intersection*).
 
 **Pseudo-vertices** are a concepts that occur at an intersection: when two edges cross, one pseudo-vertex is formed by the first edge going up to and until the intersection vertex and the second edge going out from the intersection. A second pseudo vertex is formed reciprocally. Two such *intersection-pseudo-vertices* are depicted below.
-![](./intersectionPseudoVertices.png?raw=true width="80")  
+![](/intersectionPseudoVertices.png?raw=true)  
 
 Also, at each input ring vertices one pseudo-vertex (*ring-pseudo-vertex*) is created by one egde going in and the other going out.
 
