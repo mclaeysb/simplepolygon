@@ -4,6 +4,10 @@
 		{
 			"type": "Feature",
 			"properties": {
+				"index": 0,
+				"parent": -1,
+				"winding": 1,
+				"netWinding": 1,
 				"stroke": "#F00",
 				"fill": "#F00",
 				"stroke-width": 6,
@@ -36,6 +40,10 @@
 		{
 			"type": "Feature",
 			"properties": {
+				"index": 1,
+				"parent": 0,
+				"winding": -1,
+				"netWinding": 0,
 				"stroke": "#00F",
 				"fill": "#00F",
 				"stroke-width": 6,
