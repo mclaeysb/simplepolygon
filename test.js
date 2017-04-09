@@ -34,12 +34,12 @@ function colorize(features, colors = ['#F00', '#00F'], width = 6) {
     const results = [];
     featureEach(features, (feature, index) => {
         const color = colors[index % colors.length]
-        feature.properties = {
+        feature.properties = Object.assign(feature.properties, {
             stroke: color,
             fill: color,
             'stroke-width': width,
             'fill-opacity': 0.1
-        };
+        });
         results.push(feature);
     });
     return featureCollection(results);
