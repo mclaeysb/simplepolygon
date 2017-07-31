@@ -1,6 +1,6 @@
 var isects = require('geojson-polygon-self-intersections');
 var helpers = require('@turf/helpers');
-var within = require('@turf/within');
+var inside = require('@turf/inside');
 var area = require('@turf/area');
 var rbush = require('rbush');
 var debug = require('debug')('simplepolygon');
@@ -289,10 +289,10 @@ module.exports = function(feature) {
         var parentArea = Infinity;
         for (var j = 0; j < output.features.length; j++) {
           if (featuresWithoutParent[i] == j) continue
-          if (within(helpers.featureCollection([helpers.point(output.features[featuresWithoutParent[i]].geometry.coordinates[0][0])]),helpers.featureCollection([output.features[j]])).features.length == 1) {
+          if (inside(helpers.point(output.features[featuresWithoutParent[i]].geometry.coordinates[0][0]), output.features[j], true)) {
             if (area(output.features[j]) < parentArea) {
               parent = j;
-              debugAll("Ring "+featuresWithoutParent[i]+" lies within output ring "+j);
+              debugAll("Ring "+featuresWithoutParent[i]+" lies inside output ring "+j);
             }
           }
         }
