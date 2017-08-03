@@ -30,7 +30,15 @@ test('simplepolygon', t => {
     t.end();
 });
 
-function colorize(features, colors = ['#F00', '#00F'], width = 6) {
+test('simplepolygon', t => {
+    const complex = load.sync(path.join(__dirname, 'test', 'in', 'complex.geojson'))
+    const simple = simplepolygon(complex)
+    console.log(simple.features.length)
+    t.true(simple.features.length > 2, 'complex feature must have more than 2 features')
+    t.end()
+})
+
+function colorize(features, colors = ['#F00', '#00F', '#0F0', '#F0F', '#FFF'], width = 6) {
     const results = [];
     featureEach(features, (feature, index) => {
         const color = colors[index % colors.length]

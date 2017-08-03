@@ -160,8 +160,8 @@
 				"parent": 1,
 				"winding": 1,
 				"netWinding": 2,
-				"stroke": "#F00",
-				"fill": "#F00",
+				"stroke": "#0F0",
+				"fill": "#0F0",
 				"stroke-width": 6,
 				"fill-opacity": 0.1
 			},
@@ -244,8 +244,8 @@
 				"parent": 2,
 				"winding": 1,
 				"netWinding": 3,
-				"stroke": "#00F",
-				"fill": "#00F",
+				"stroke": "#F0F",
+				"fill": "#F0F",
 				"stroke-width": 6,
 				"fill-opacity": 0.1
 			},
