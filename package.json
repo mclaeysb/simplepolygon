@@ -28,10 +28,10 @@
     "url": "https://github.com/mclaeysb/simplepolygon/issues"
   },
   "dependencies": {
-    "@turf/area": "^3.13.0",
-    "@turf/helpers": "^3.13.0",
+    "@turf/area": "^4.5.0",
+    "@turf/helpers": "^4.5.0",
     "@turf/inside": "^4.5.2",
-    "@turf/within": "^3.13.0",
+    "@turf/within": "^4.5.0",
     "debug": "^2.6.3",
     "geojson-polygon-self-intersections": "^1.1.2",
     "rbush": "^2.0.1"
