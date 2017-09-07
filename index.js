@@ -102,7 +102,7 @@ module.exports = function(feature) {
   debug("Setting up pseudoVtxListByRingAndEdge and isectList");
 
   // Make a spatial index of intersections, in preperation for the following two steps
-  allIsectsAsIsectRbushTreeItem = [];
+  var allIsectsAsIsectRbushTreeItem = [];
   for (var i = 0; i < numIsect; i++) {
     allIsectsAsIsectRbushTreeItem.push({minX: isectList[i].coord[0], minY: isectList[i].coord[1], maxX: isectList[i].coord[0], maxY: isectList[i].coord[1], index: i}); // could pass isect: isectList[i], but not necessary
   }
