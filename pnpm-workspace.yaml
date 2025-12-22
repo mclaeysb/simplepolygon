@@ -1,0 +1,2 @@
+overrides:
+  geojson-polygon-self-intersections: link:../geojson-polygon-self-intersections
