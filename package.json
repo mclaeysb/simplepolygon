@@ -51,8 +51,6 @@
     "@turf/area": "7.3.1",
     "@turf/boolean-point-in-polygon": "7.3.1",
     "@turf/helpers": "7.3.1",
-    "@turf/inside": "5.0.0",
-    "@turf/within": "4.5.0",
     "geojson": "0.5.0",
     "geojson-polygon-self-intersections": "2.0.0",
     "rbush": "4.0.1"

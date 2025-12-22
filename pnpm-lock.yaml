@@ -9,44 +9,38 @@ importers:
   .:
     dependencies:
       '@turf/area':
-        specifier: ^7.3.1
+        specifier: 7.3.1
         version: 7.3.1
       '@turf/boolean-point-in-polygon':
-        specifier: ^7.3.1
+        specifier: 7.3.1
         version: 7.3.1
       '@turf/helpers':
-        specifier: ^7.3.1
+        specifier: 7.3.1
         version: 7.3.1
-      '@turf/inside':
-        specifier: ^5.0.0
-        version: 5.0.0
-      '@turf/within':
-        specifier: ^4.5.0
-        version: 4.7.3
       geojson:
-        specifier: ^0.5.0
+        specifier: 0.5.0
         version: 0.5.0
       geojson-polygon-self-intersections:
-        specifier: link:../geojson-polygon-self-intersections
-        version: link:../geojson-polygon-self-intersections
+        specifier: 2.0.0
+        version: 2.0.0
       rbush:
-        specifier: ^4.0.1
+        specifier: 4.0.1
         version: 4.0.1
     devDependencies:
       '@eslint/eslintrc':
-        specifier: ^3.3.3
+        specifier: 3.3.3
         version: 3.3.3
       '@eslint/js':
-        specifier: ^9.39.2
+        specifier: 9.39.2
         version: 9.39.2
       '@turf/meta':
-        specifier: ^7.3.1
+        specifier: 7.3.1
         version: 7.3.1
       '@types/geojson':
-        specifier: ^7946.0.16
+        specifier: 7946.0.16
         version: 7946.0.16
       '@types/node':
-        specifier: ^25.0.3
+        specifier: 25.0.3
         version: 25.0.3
       '@types/rbush':
         specifier: 4.0.0
@@ -55,10 +49,10 @@ importers:
         specifier: 9.39.2
         version: 9.39.2
       eslint-config-prettier:
-        specifier: ^10.1.8
+        specifier: 10.1.8
         version: 10.1.8(eslint@9.39.2)
       globals:
-        specifier: ^16.5.0
+        specifier: 16.5.0
         version: 16.5.0
       prettier:
         specifier: 3.7.4
@@ -407,38 +401,14 @@ packages:
   '@turf/boolean-point-in-polygon@7.3.1':
     resolution: {integrity: sha512-BUPW63vE43LctwkgannjmEFTX1KFR/18SS7WzFahJWK1ZoP0s1jrfxGX+pi0BH/3Dd9mA71hkGKDDnj1Ndcz0g==}
 
-  '@turf/helpers@4.7.3':
-    resolution: {integrity: sha512-hk5ANVazb80zK6tjJYAG76oCRTWMQo6SAFu5E1dVnlb2kT3FHLoPcOB9P11duwDafMwywz24KZ+FUorB5e728w==}
-
-  '@turf/helpers@5.1.5':
-    resolution: {integrity: sha512-/lF+JR+qNDHZ8bF9d+Cp58nxtZWJ3sqFe6n3u3Vpj+/0cqkjk4nXKYBSY0azm+GIYB5mWKxUXvuP/m0ZnKj1bw==}
-
   '@turf/helpers@7.3.1':
     resolution: {integrity: sha512-zkL34JVhi5XhsuMEO0MUTIIFEJ8yiW1InMu4hu/oRqamlY4mMoZql0viEmH6Dafh/p+zOl8OYvMJ3Vm3rFshgg==}
-
-  '@turf/inside@4.7.3':
-    resolution: {integrity: sha512-V/gMvWxoOCMNEz1KUcFVWDS78jvcNtVxNAf2oc3jz8NYs+DUZymkKjHiLkM9NPQ8fjXwsAsFq12DYgTp+HnDig==}
-    deprecated: Module has been renamed to @turf/boolean-point-in-polygon
-
-  '@turf/inside@5.0.0':
-    resolution: {integrity: sha512-qfPoy2T+TGJoeG+EYJmS+97kXLQ8VfDX39U/S9vl857hYLR5jV+VLmD+6Y4wvE3wTSeLsYVBcmWkrQjEhYUyDg==}
-    deprecated: Module has been renamed to @turf/boolean-point-in-polygon
-
-  '@turf/invariant@4.7.3':
-    resolution: {integrity: sha512-MtlIn9aPC4gZsflLEnfBl/o/SJjZU/yuvj+fo9qRXUOI8wBiKaUcZIT4x1jdLW0NGvU7wMPWJSFJanLCQ9eU1w==}
-
-  '@turf/invariant@5.2.0':
-    resolution: {integrity: sha512-28RCBGvCYsajVkw2EydpzLdcYyhSA77LovuOvgCJplJWaNVyJYH6BOR3HR9w50MEkPqb/Vc/jdo6I6ermlRtQA==}
 
   '@turf/invariant@7.3.1':
     resolution: {integrity: sha512-IdZJfDjIDCLH+Gu2yLFoSM7H23sdetIo5t4ET1/25X8gi3GE2XSqbZwaGjuZgNh02nisBewLqNiJs2bo+hrqZA==}
 
   '@turf/meta@7.3.1':
     resolution: {integrity: sha512-NWsfOE5RVtWpLQNkfOF/RrYvLRPwwruxhZUV0UFIzHqfiRJ50aO9Y6uLY4bwCUe2TumLJQSR4yaoA72Rmr2mnQ==}
-
-  '@turf/within@4.7.3':
-    resolution: {integrity: sha512-8uOT6U8GFeC84tMAHw9ViFiOY3JZI49/Xfmm3wk+P43unv0iEl20pIFjwRmF10G14d3ca2AcOxmxuXVYWRXvGA==}
-    deprecated: Module has been renamed to @turf/points-within-polygon
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -724,6 +694,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  geojson-polygon-self-intersections@2.0.0:
+    resolution: {integrity: sha512-PTaAS7AQlvfiZZoo/4uMrwI+upSsOvDy5CpmFtsEUB95yerN8ypxVMa15rj9CpBoghTGIo8RmHu9TtefGh8luw==}
 
   geojson@0.5.0:
     resolution: {integrity: sha512-/Bx5lEn+qRF4TfQ5aLu6NH+UKtvIv7Lhc487y/c8BdludrCTpiWf9wyI0RTyqg49MFefIAvFDuEi5Dfd/zgNxQ==}
@@ -1289,28 +1262,10 @@ snapshots:
       point-in-polygon-hao: 1.2.4
       tslib: 2.8.1
 
-  '@turf/helpers@4.7.3': {}
-
-  '@turf/helpers@5.1.5': {}
-
   '@turf/helpers@7.3.1':
     dependencies:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
-
-  '@turf/inside@4.7.3':
-    dependencies:
-      '@turf/invariant': 4.7.3
-
-  '@turf/inside@5.0.0':
-    dependencies:
-      '@turf/invariant': 5.2.0
-
-  '@turf/invariant@4.7.3': {}
-
-  '@turf/invariant@5.2.0':
-    dependencies:
-      '@turf/helpers': 5.1.5
 
   '@turf/invariant@7.3.1':
     dependencies:
@@ -1322,11 +1277,6 @@ snapshots:
     dependencies:
       '@turf/helpers': 7.3.1
       '@types/geojson': 7946.0.16
-
-  '@turf/within@4.7.3':
-    dependencies:
-      '@turf/helpers': 4.7.3
-      '@turf/inside': 4.7.3
 
   '@types/chai@5.2.3':
     dependencies:
@@ -1675,6 +1625,10 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  geojson-polygon-self-intersections@2.0.0:
+    dependencies:
+      rbush: 4.0.1
 
   geojson@0.5.0: {}
 
