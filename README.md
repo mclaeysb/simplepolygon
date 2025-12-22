@@ -22,6 +22,8 @@ You can optionally build this package locally by running:
 npm run build
 ```
 
+Commands for tests and benchmarking are included. Run `DEBUG=* pnpm run test` to run tests or other code with debugging logs.
+
 ## Usage
 
 ```js
