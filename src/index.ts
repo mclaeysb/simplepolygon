@@ -1,10 +1,10 @@
 import gpsi, { equalArrays } from 'geojson-polygon-self-intersections'
 import { point, polygon, featureCollection } from '@turf/helpers'
-import inside from '@turf/inside'
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import area from '@turf/area'
 import RBush from 'rbush'
 
-import type { Polygon, Polygons, Position } from '@turf/helpers'
+import type { Feature, FeatureCollection, Polygon, Position } from 'geojson'
 
 type QueueItem = { isect: number; parent: number; winding: number }
 type RBushIsectItem = {
@@ -36,7 +36,9 @@ type RBushIsectItem = {
  * // =result
  * // which will be a featureCollection of two polygons, one with coordinates [[[0,0],[2,0],[1,1],[0,0]]], parent -1, winding 1 and net winding 1, and one with coordinates [[[1,1],[0,2],[2,2],[1,1]]], parent -1, winding -1 and net winding -1
  */
-export default function simplepolygon(feature: Polygon): Polygons {
+export default function simplepolygon(
+  feature: Feature<Polygon>
+): FeatureCollection<Polygon> {
   // Check input
   if (feature.type != 'Feature')
     throw new Error('The input must a geojson object of type Feature')
@@ -60,7 +62,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
       'The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)'
     )
   const numvertices = vertices.length // number of input ring vertices, with the last closing vertices not counted
-  console.debug('Processing input')
+  logger('Processing input')
 
   // Compute self-intersections
   const selfIsectsData = gpsi(feature.geometry.coordinates, {
@@ -108,7 +110,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
     }
   })
   const numSelfIsect = selfIsectsData.length
-  console.debug('Computing self-intersections')
+  logger('Computing self-intersections')
 
   // If no self-intersections are found, the input rings are the output rings. Hence, we must only compute their winding numbers, net winding numbers and (since ohers rings could lie outside the first ring) parents.
   if (numSelfIsect == 0) {
@@ -124,10 +126,10 @@ export default function simplepolygon(feature: Polygon): Polygons {
     const output = featureCollection(outputFeatureArray)
     determineParents(output)
     setNetWinding(output)
-    console.debug(
+    logger(
       'No self-intersections found. Input rings are output rings. Computed winding numbers, net winding numbers and parents'
     )
-    console.debug('Finishing without self-intersections')
+    logger('Finishing without self-intersections')
     return output
   }
 
@@ -196,7 +198,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
       })
     }
   }
-  console.debug('Setting up pseudoVtxListByRingAndEdge and isectList')
+  logger('Setting up pseudoVtxListByRingAndEdge and isectList')
 
   // Make a spatial index of intersections, in preperation for the following two steps
   const allIsectsAsIsectRbushTreeItem = []
@@ -239,7 +241,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
       }
     }
   }
-  console.debug('Computing nextIsect for pseudoVtxListByRingAndEdge')
+  logger('Computing nextIsect for pseudoVtxListByRingAndEdge')
 
   // Second, we port this knowledge of the next intersection over to the intersections in isectList, by finding the intersection corresponding to each pseudo-vertex and copying the pseudo-vertex' knownledge of the next-intersection over to the intersection
   for (let i = 0; i < pseudoVtxListByRingAndEdge.length; i++) {
@@ -276,7 +278,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
     }
   }
   // This explains why, eventhough when we will walk away from an intersection, we will walk way from the corresponding pseudo-vertex along edgeOut, pseudo-vertices have the property 'nxtIsectAlongEdgeIn' in stead of some propery 'nxtPseudoVtxAlongEdgeOut'. This is because this property (which is easy to find out) is used in the above for nxtIsectAlongRingAndEdge1 and nxtIsectAlongRingAndEdge2!
-  console.debug('Porting nextIsect to isectList')
+  logger('Porting nextIsect to isectList')
 
   // Before we start walking over the intersections to build the output rings, we prepare a queue that stores information on intersections we still have to deal with, and put at least one intersection in it.
   // This queue will contain information on intersections where we can start walking from once the current walk is finished, and its parent output ring (the smallest output ring it lies within, -1 if no parent or parent unknown yet) and its winding number (which we can already determine).
@@ -324,8 +326,8 @@ export default function simplepolygon(feature: Polygon): Polygons {
   queue.sort(function (a, b) {
     return isectList[a.isect].coord > isectList[b.isect].coord ? -1 : 1
   })
-  console.debug('Initial state of the queue: ' + JSON.stringify(queue))
-  console.debug('Setting up queue')
+  logger('Initial state of the queue: ' + JSON.stringify(queue))
+  logger('Setting up queue')
 
   // Initialise output
   const outputFeatureArray = []
@@ -340,7 +342,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
     // Make new output ring and add vertex from starting intersection
     const currentOutputRing: number = outputFeatureArray.length
     const currentOutputRingCoords = [isectList[startIsect].coord]
-    console.debug(
+    logger(
       '# Starting output ring number ' +
         outputFeatureArray.length +
         ' with winding ' +
@@ -349,7 +351,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
         startIsect
     )
     if (startIsect < numvertices) {
-      console.debug(
+      logger(
         'This is a ring-vertex-intersections, which means this output ring does not touch existing output rings'
       )
     }
@@ -362,7 +364,6 @@ export default function simplepolygon(feature: Polygon): Polygons {
       if (isectList[startIsect].nxtIsectAlongRingAndEdge1 != undefined) {
         nxtIsect = isectList[startIsect].nxtIsectAlongRingAndEdge1
       } else {
-        console.log(isectList[startIsect])
         throw new Error('Next intersection not defined')
       }
     } else {
@@ -377,7 +378,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
     while (
       !equalArrays(isectList[startIsect].coord, isectList[nxtIsect].coord)
     ) {
-      console.debug(
+      logger(
         'Walking from intersection ' +
           currentIsect +
           ' to ' +
@@ -388,9 +389,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
           walkingRingAndEdge[1]
       )
       currentOutputRingCoords.push(isectList[nxtIsect].coord)
-      console.debug(
-        'Adding intersection ' + nxtIsect + ' to current output ring'
-      )
+      logger('Adding intersection ' + nxtIsect + ' to current output ring')
       // If the next intersection is queued, we can remove it, because we will go there now.
       let nxtIsectInQueue
       for (let i = 0; i < queue.length; i++) {
@@ -400,7 +399,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
         }
       }
       if (nxtIsectInQueue != undefined) {
-        console.debug('Removing intersection ' + nxtIsect + ' from queue')
+        logger('Removing intersection ' + nxtIsect + ' from queue')
         queue.splice(nxtIsectInQueue, 1)
       }
       // Arriving at this new intersection, we know which will be our next walking ring and edge (if we came from 1 we will walk away from 2 and vice versa),
@@ -412,7 +411,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
         walkingRingAndEdge = isectList[nxtIsect].ringAndEdge2
         isectList[nxtIsect].ringAndEdge2Walkable = false
         if (isectList[nxtIsect].ringAndEdge1Walkable) {
-          console.debug('Adding intersection ' + nxtIsect + ' to queue')
+          logger('Adding intersection ' + nxtIsect + ' to queue')
           let pushing: QueueItem
           const nxtIsectAlongRingAndEdge2 =
             isectList[nxtIsect].nxtIsectAlongRingAndEdge2
@@ -444,8 +443,9 @@ export default function simplepolygon(feature: Polygon): Polygons {
           queue.push(pushing)
         }
         currentIsect = nxtIsect
-        if (isectList[startIsect].nxtIsectAlongRingAndEdge2 != undefined) {
-          nxtIsect = isectList[startIsect].nxtIsectAlongRingAndEdge2
+        const nextIsectCandidate = isectList[nxtIsect].nxtIsectAlongRingAndEdge2
+        if (nextIsectCandidate != undefined) {
+          nxtIsect = nextIsectCandidate
         } else {
           throw new Error('Next intersection not defined')
         }
@@ -453,7 +453,7 @@ export default function simplepolygon(feature: Polygon): Polygons {
         walkingRingAndEdge = isectList[nxtIsect].ringAndEdge1
         isectList[nxtIsect].ringAndEdge1Walkable = false
         if (isectList[nxtIsect].ringAndEdge2Walkable) {
-          console.debug('Adding intersection ' + nxtIsect + ' to queue')
+          logger('Adding intersection ' + nxtIsect + ' to queue')
           let pushing: QueueItem
           const nxtIsectAlongRingAndEdge1 =
             isectList[nxtIsect].nxtIsectAlongRingAndEdge1
@@ -485,16 +485,16 @@ export default function simplepolygon(feature: Polygon): Polygons {
           queue.push(pushing)
         }
         currentIsect = nxtIsect
-        if (isectList[startIsect].nxtIsectAlongRingAndEdge1 != undefined) {
-          nxtIsect = isectList[startIsect].nxtIsectAlongRingAndEdge1
+        const nextIsectCandidate = isectList[nxtIsect].nxtIsectAlongRingAndEdge1
+        if (nextIsectCandidate != undefined) {
+          nxtIsect = nextIsectCandidate
         } else {
-          console.log(isectList[startIsect])
           throw new Error('Next intersection not defined')
         }
       }
-      console.debug('Current state of the queue: ' + JSON.stringify(queue))
+      logger('Current state of the queue: ' + JSON.stringify(queue))
     }
-    console.debug(
+    logger(
       'Walking from intersection ' +
         currentIsect +
         ' to ' +
@@ -519,15 +519,15 @@ export default function simplepolygon(feature: Polygon): Polygons {
   }
 
   const output = featureCollection(outputFeatureArray)
-  console.debug('Walking')
+  logger('Walking')
 
   determineParents(output)
-  console.debug('Determining parents')
+  logger('Determining parents')
 
   setNetWinding(output)
-  console.debug('Setting winding number')
+  logger('Setting winding number')
 
-  console.debug('# Total of ' + output.features.length + ' rings')
+  logger('# Total of ' + output.features.length + ' rings')
 
   return output
 }
@@ -642,10 +642,10 @@ function mod(n: number, m: number) {
   return ((n % m) + m) % m
 }
 
-function determineParents(output: Polygons) {
+function determineParents(output: FeatureCollection<Polygon>) {
   const featuresWithoutParent = []
   for (let i = 0; i < output.features.length; i++) {
-    console.debug(
+    logger(
       'Output ring ' +
         i +
         ' has parent ' +
@@ -654,7 +654,7 @@ function determineParents(output: Polygons) {
     if (output.features[i].properties?.parent == -1)
       featuresWithoutParent.push(i)
   }
-  console.debug(
+  logger(
     'The following output ring(s) have no parent: ' + featuresWithoutParent
   )
   if (featuresWithoutParent.length > 1) {
@@ -664,18 +664,18 @@ function determineParents(output: Polygons) {
       for (let j = 0; j < output.features.length; j++) {
         if (featuresWithoutParent[i] == j) continue
         if (
-          inside(
+          booleanPointInPolygon(
             point(
               output.features[featuresWithoutParent[i]].geometry
                 .coordinates[0][0]
             ),
             output.features[j],
-            true
+            { ignoreBoundary: true }
           )
         ) {
           if (area(output.features[j]) < parentArea) {
             parent = j
-            console.debug(
+            logger(
               'Ring ' +
                 featuresWithoutParent[i] +
                 ' lies inside output ring ' +
@@ -686,14 +686,14 @@ function determineParents(output: Polygons) {
       }
       const properties = output.features[featuresWithoutParent[i]].properties
       if (properties) properties.parent = parent
-      console.debug(
+      logger(
         'Ring ' + featuresWithoutParent[i] + ' is assigned parent ' + parent
       )
     }
   }
 }
 
-function setNetWinding(output: Polygons) {
+function setNetWinding(output: FeatureCollection<Polygon>) {
   for (let i = 0; i < output.features.length; i++) {
     const properties = output.features[i].properties
     if (properties?.parent == -1) {
@@ -705,7 +705,7 @@ function setNetWinding(output: Polygons) {
 }
 
 function setNetWindingOfChildren(
-  output: Polygons,
+  output: FeatureCollection<Polygon>,
   parent: number,
   parentNetWinding: number
 ) {
@@ -716,5 +716,11 @@ function setNetWindingOfChildren(
       properties.netWinding = netWinding
       setNetWindingOfChildren(output, i, netWinding)
     }
+  }
+}
+
+function logger(message: string) {
+  if (process.env.DEBUG === 'true') {
+    console.log(message)
   }
 }
