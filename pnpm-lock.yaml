@@ -21,8 +21,8 @@ importers:
         specifier: 0.5.0
         version: 0.5.0
       geojson-polygon-self-intersections:
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 3.0.0
+        version: 3.0.0
       rbush:
         specifier: 4.0.1
         version: 4.0.1
@@ -695,8 +695,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  geojson-polygon-self-intersections@2.0.0:
-    resolution: {integrity: sha512-PTaAS7AQlvfiZZoo/4uMrwI+upSsOvDy5CpmFtsEUB95yerN8ypxVMa15rj9CpBoghTGIo8RmHu9TtefGh8luw==}
+  geojson-polygon-self-intersections@3.0.0:
+    resolution: {integrity: sha512-MAFUwdy0qp3uJzuUWA87yqPlFQXOc7AMph8fy1/4zEe3d+iV/2U8O5gzVpdG7FXPvUl7sgmfIASYD7iN52dh1Q==}
 
   geojson@0.5.0:
     resolution: {integrity: sha512-/Bx5lEn+qRF4TfQ5aLu6NH+UKtvIv7Lhc487y/c8BdludrCTpiWf9wyI0RTyqg49MFefIAvFDuEi5Dfd/zgNxQ==}
@@ -1626,7 +1626,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  geojson-polygon-self-intersections@2.0.0:
+  geojson-polygon-self-intersections@3.0.0:
     dependencies:
       rbush: 4.0.1
 

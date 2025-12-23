@@ -65,7 +65,7 @@ export default function simplepolygon(
   logger('Processing input')
 
   // Compute self-intersections
-  const selfIsectsData = gpsi(feature.geometry.coordinates, {
+  const selfIsectsData = gpsi(feature, {
     callbackFunction: ({
       isect,
       ring0,
