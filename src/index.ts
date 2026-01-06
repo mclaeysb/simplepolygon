@@ -720,7 +720,11 @@ function setNetWindingOfChildren(
 }
 
 function logger(message: string) {
-  if (process.env.DEBUG === 'true') {
+  if (
+    typeof process !== 'undefined' &&
+    process.env &&
+    process.env.DEBUG === 'true'
+  ) {
     console.log(message)
   }
 }
