@@ -57,7 +57,7 @@ export default function simplepolygon(
     }
     vertices.push.apply(vertices, ring.slice(0, ring.length - 1))
   }
-  if (vertices.length != new Set(vertices).size)
+  if (vertices.length != new Set(vertices.map((v) => `${v[0]},${v[1]}`)).size)
     throw new Error(
       'The input polygon may not have duplicate vertices (except for the first and last vertex of each ring)'
     )
